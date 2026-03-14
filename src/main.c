@@ -5,7 +5,7 @@
      const int screenWidth = 800;
      const int screenHeight = 600;
  
-     InitWindow(screenWidth, screenHeight, "BIT Anomalies - Night Market");
+     InitWindow(screenWidth, screenHeight, "BIT Anomalies - 夜市 (Bohou Supermarket)");
      SetTargetFPS(60);
  
      // Audio is optional, but we still initialize the device.

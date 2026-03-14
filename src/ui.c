@@ -63,7 +63,7 @@
               titleSize,
               (Color){ 240, 220, 255, 255 });
  
-     const char *subtitle = "Night Market Prototype";
+     const char *subtitle = "Bohou Supermarket";
      int subSize = 20;
      int subWidth = MeasureText(subtitle, subSize);
      DrawText(subtitle,
@@ -72,7 +72,7 @@
               subSize,
               (Color){ 190, 170, 230, 255 });
  
-     const char *hint = "[Enter] Begin Investigation";
+     const char *hint = "[Enter] Start";
      int hintSize = 18;
      int hintWidth = MeasureText(hint, hintSize);
      unsigned char alpha = (unsigned char)(130 + 50 * (0.5f + 0.5f * sinf(t * 2.8f)));

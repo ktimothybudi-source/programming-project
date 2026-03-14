@@ -1,56 +1,69 @@
- #ifndef DIALOGUE_H
- #define DIALOGUE_H
- 
- #include "raylib.h"
- #include <stdbool.h>
- 
- typedef struct DialogueLine {
-     const char *speaker;
-     const char *text;
- } DialogueLine;
- 
- // A simple dialogue script
- typedef struct DialogueScript {
-     const DialogueLine *lines;
-     int lineCount;
- } DialogueScript;
- 
- typedef enum DialogueId {
-     DIALOGUE_NONE = 0,
-     DIALOGUE_INTRO_MONOLOGUE,
-     DIALOGUE_VENDOR_FIRST,
-     DIALOGUE_VENDOR_AFTER_ANOMALY,
-     DIALOGUE_MASKED_CUSTOMER,
-     DIALOGUE_CHILD_WHISPER_FIRST,
-     DIALOGUE_CHILD_WHISPER_AFTER,
-     DIALOGUE_FAKE_ANNOUNCEMENT,
-     DIALOGUE_ENDING
- } DialogueId;
- 
- typedef struct DialogueSystem {
-     const DialogueScript *current;
-     DialogueId currentId;
-     int currentIndex;
-     bool active;
-     bool justClosed;
- } DialogueSystem;
- 
- typedef struct Game Game;
- 
- // Create / destroy
- DialogueSystem *Dialogue_Create(void);
- void            Dialogue_Destroy(DialogueSystem *dlg);
- 
- // Per-frame
- void            Dialogue_Update(DialogueSystem *dlg);
- void            Dialogue_Draw(const DialogueSystem *dlg, int screenWidth, int screenHeight);
- 
- // Control
- void            Dialogue_Start(DialogueSystem *dlg, DialogueId id, const Game *game);
- void            Dialogue_Close(DialogueSystem *dlg);
- 
- // Helpers
- bool            Dialogue_IsActive(const DialogueSystem *dlg);
- bool            Dialogue_JustClosed(DialogueSystem *dlg);
- 
- #endif // DIALOGUE_H
+#ifndef DIALOGUE_H
+#define DIALOGUE_H
+
+#include "raylib.h"
+#include <stdbool.h>
+
+typedef struct DialogueLine {
+    const char *speaker;
+    const char *text;
+} DialogueLine;
+
+typedef struct DialogueScript {
+    const DialogueLine *lines;
+    int lineCount;
+} DialogueScript;
+
+// Story dialogue IDs: intro, days 1-4, customers, ending
+typedef enum DialogueId {
+    DIALOGUE_NONE = 0,
+    // Intro / Day 1
+    DIALOGUE_INTRO_DAY1,
+    DIALOGUE_DAY1_CLOCKED_IN,
+    DIALOGUE_DAY1_FIRST_CUSTOMERS,
+    DIALOGUE_DAY1_END_OF_DAY,
+    // Day 2
+    DIALOGUE_DAY2_RADIO_NEWS,
+    DIALOGUE_DAY2_YOUNG_LADY,
+    DIALOGUE_DAY2_OLD_MAN,
+    DIALOGUE_DAY2_END,
+    // Day 3
+    DIALOGUE_DAY3_BOSS_CALL,
+    DIALOGUE_DAY3_FREEZER_DONE,
+    DIALOGUE_DAY3_TEEN_BOY,
+    DIALOGUE_DAY3_OLD_LADY,
+    DIALOGUE_DAY3_CREEPY_MAN,
+    DIALOGUE_DAY3_END,
+    // Day 4
+    DIALOGUE_DAY4_SHAMAN,
+    DIALOGUE_DAY4_LIGHTS_OUT,
+    DIALOGUE_DAY4_GENERATOR_FIXED,
+    DIALOGUE_DAY4_FOOTSTEPS,
+    DIALOGUE_DAY4_HIDE_IN_LOCKER,
+    DIALOGUE_ENDING_1,
+    DIALOGUE_THE_END,
+    // Count / placeholder
+    DIALOGUE_COUNT
+} DialogueId;
+
+typedef struct DialogueSystem {
+    const DialogueScript *current;
+    DialogueId currentId;
+    DialogueId lastClosedId;
+    int currentIndex;
+    bool active;
+    bool justClosed;
+} DialogueSystem;
+
+typedef struct Game Game;
+
+DialogueSystem *Dialogue_Create(void);
+void            Dialogue_Destroy(DialogueSystem *dlg);
+void            Dialogue_Update(DialogueSystem *dlg);
+void            Dialogue_Draw(const DialogueSystem *dlg, int screenWidth, int screenHeight);
+void            Dialogue_Start(DialogueSystem *dlg, DialogueId id, const Game *game);
+void            Dialogue_Close(DialogueSystem *dlg);
+bool            Dialogue_IsActive(const DialogueSystem *dlg);
+bool            Dialogue_JustClosed(DialogueSystem *dlg);
+
+#endif // DIALOGUE_H

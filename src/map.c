@@ -1,238 +1,291 @@
- #include "map.h"
- #include "raylib.h"
- #include <stdlib.h>
- 
- static void BuildGeometry(Map *map, int screenWidth, int screenHeight);
- static void BuildStalls(Map *map);
- static void BuildLanterns(Map *map);
- static void BuildNpcs(Map *map);
- 
- Map *Map_Create(int screenWidth, int screenHeight) {
-     Map *m = (Map *)malloc(sizeof(Map));
-     if (!m) return NULL;
- 
-     m->bounds = (Rectangle){ 40.0f, 40.0f, (float)screenWidth - 80.0f, (float)screenHeight - 80.0f };
-     m->wallCount = 0;
-     m->stallCount = 0;
-     m->lanternCount = 0;
-     m->npcCount = 0;
-     m->lanternsStrangeColors = false;
-     m->stallShifted = false;
- 
-     BuildGeometry(m, screenWidth, screenHeight);
-     BuildStalls(m);
-     BuildLanterns(m);
-     BuildNpcs(m);
- 
-     // Uncanny zone: a narrow side alley on the right
-     m->uncannyZone = (Rectangle){ m->bounds.x + m->bounds.width - 120.0f, m->bounds.y + 140.0f, 80.0f, 160.0f };
- 
-     return m;
- }
- 
- void Map_Destroy(Map *map) {
-     if (map) free(map);
- }
- 
- const Rectangle *Map_GetWalls(const Map *map, int *count) {
-     if (count) *count = map->wallCount;
-     return map->walls;
- }
- 
- const Stall *Map_GetStalls(const Map *map, int *count) {
-     if (count) *count = map->stallCount;
-     return map->stalls;
- }
- 
- const NpcSpot *Map_GetNpcs(const Map *map, int *count) {
-     if (count) *count = map->npcCount;
-     return map->npcs;
- }
- 
- Rectangle Map_GetUncannyZone(const Map *map) {
-     return map->uncannyZone;
- }
- 
- static void BuildGeometry(Map *map, int screenWidth, int screenHeight) {
-     // Outer walls
-     float margin = 36.0f;
-     Rectangle play = (Rectangle){ margin, margin, screenWidth - margin*2.0f, screenHeight - margin*2.0f };
- 
-     map->walls[map->wallCount++] = (Rectangle){ play.x, play.y, play.width, 12.0f };
-     map->walls[map->wallCount++] = (Rectangle){ play.x, play.y + play.height - 12.0f, play.width, 12.0f };
-     map->walls[map->wallCount++] = (Rectangle){ play.x, play.y, 12.0f, play.height };
-     map->walls[map->wallCount++] = (Rectangle){ play.x + play.width - 12.0f, play.y, 12.0f, play.height };
- 
-     // Central walkway (visual only)
-     (void)screenWidth;
-     (void)screenHeight;
- 
-     // Some crates / carts as obstacles
-     map->walls[map->wallCount++] = (Rectangle){ play.x + 150.0f, play.y + 220.0f, 40.0f, 40.0f };
-     map->walls[map->wallCount++] = (Rectangle){ play.x + 260.0f, play.y + 360.0f, 60.0f, 36.0f };
-     map->walls[map->wallCount++] = (Rectangle){ play.x + play.width - 220.0f, play.y + 260.0f, 60.0f, 40.0f };
- 
-     // Narrow alleys using walls
-     map->walls[map->wallCount++] = (Rectangle){ play.x + play.width * 0.5f - 16.0f, play.y + 130.0f, 32.0f, 120.0f };
- }
- 
- static void BuildStalls(Map *map) {
-     float yTop = map->bounds.y + 80.0f;
-     float yBottom = map->bounds.y + map->bounds.height - 180.0f;
-     float xStart = map->bounds.x + 80.0f;
-     float step = 140.0f;
- 
-     // Food stall
-     map->stalls[map->stallCount++] = (Stall){
-         (Rectangle){ xStart, yTop, 80.0f, 50.0f },
-         STALL_FOOD,
-         "Skewers"
-     };
- 
-     // Mask stall (masked customer near this)
-     map->stalls[map->stallCount++] = (Stall){
-         (Rectangle){ xStart + step, yTop + 10.0f, 90.0f, 50.0f },
-         STALL_MASKS,
-         "Masks"
-     };
- 
-     // Incense stall
-     map->stalls[map->stallCount++] = (Stall){
-         (Rectangle){ xStart + step * 2.0f, yTop + 5.0f, 100.0f, 55.0f },
-         STALL_INCENSE,
-         "Incense"
-     };
- 
-     // Misc uncanny stall (shifts after anomaly)
-     map->stalls[map->stallCount++] = (Stall){
-         (Rectangle){ xStart + step * 0.5f, yBottom, 90.0f, 55.0f },
-         STALL_MISC,
-         "Lost & Found"
-     };
- }
- 
- static void BuildLanterns(Map *map) {
-     float y = map->bounds.y + 60.0f;
-     float xStart = map->bounds.x + 70.0f;
-     float xEnd = map->bounds.x + map->bounds.width - 70.0f;
-     float step = (xEnd - xStart) / 6.0f;
- 
-     for (int i = 0; i < 7 && i < MAX_LANTERNS; i++) {
-         map->lanterns[map->lanternCount++] = (Lantern){
-             (Vector2){ xStart + step * i, y },
-             10.0f
-         };
-     }
- }
- 
- static void BuildNpcs(Map *map) {
-     // Suspicious food vendor near food stall
-     Stall *food = &map->stalls[0];
-     map->npcs[map->npcCount++] = (NpcSpot){
-         (Rectangle){ food->bounds.x + food->bounds.width * 0.5f - 10.0f,
-                      food->bounds.y + food->bounds.height + 8.0f,
-                      20.0f, 24.0f },
-         "Vendor"
-     };
- 
-     // Quiet masked customer near mask stall
-     Stall *mask = &map->stalls[1];
-     map->npcs[map->npcCount++] = (NpcSpot){
-         (Rectangle){ mask->bounds.x + mask->bounds.width + 10.0f,
-                      mask->bounds.y + 4.0f,
-                      18.0f, 24.0f },
-         "Masked"
-     };
- 
-     // Child voice location in uncanny alley (no visible body)
-     map->npcs[map->npcCount++] = (NpcSpot){
-         (Rectangle){ map->uncannyZone.x + map->uncannyZone.width * 0.5f - 8.0f,
-                      map->uncannyZone.y + map->uncannyZone.height * 0.5f - 8.0f,
-                      16.0f, 16.0f },
-         "???"
-     };
- 
-     // A generic passerby
-     map->npcs[map->npcCount++] = (NpcSpot){
-         (Rectangle){ map->bounds.x + 80.0f,
-                      map->bounds.y + map->bounds.height * 0.5f,
-                      18.0f, 24.0f },
-         "Customer"
-     };
- }
- 
- void Map_DrawBackground(const Map *map) {
-     // Night sky tint
-     ClearBackground((Color){ 10, 7, 20, 255 });
- 
-     // Ground
-     DrawRectangleRec(map->bounds, (Color){ 20, 20, 35, 255 });
- 
-     // Central walkway
-     Rectangle walkway = {
-         map->bounds.x + 70.0f,
-         map->bounds.y + 120.0f,
-         map->bounds.width - 140.0f,
-         map->bounds.height - 220.0f
-     };
-     DrawRectangleRounded(walkway, 0.02f, 4, (Color){ 35, 32, 50, 255 });
- 
-     // Alleys (darker)
-     DrawRectangleRec(map->uncannyZone, (Color){ 10, 5, 20, 255 });
- 
-     // Stalls
-     for (int i = 0; i < map->stallCount; i++) {
-         const Stall *s = &map->stalls[i];
-         Color c = { 70, 40, 40, 255 };
-         if (s->type == STALL_MASKS)      c = (Color){ 50, 40, 70, 255 };
-         else if (s->type == STALL_INCENSE) c = (Color){ 60, 40, 50, 255 };
-         else if (s->type == STALL_MISC)    c = (Color){ 40, 60, 60, 255 };
- 
-         DrawRectangleRounded(s->bounds, 0.1f, 6, c);
-         DrawRectangleLinesEx(s->bounds, 2.0f, (Color){ 180, 160, 160, 255 });
- 
-         Vector2 textPos = { s->bounds.x + 6.0f, s->bounds.y - 18.0f };
-         DrawText(s->label, (int)textPos.x, (int)textPos.y, 14, (Color){ 230, 220, 220, 255 });
-     }
- 
-     // Npcs as silhouettes
-     for (int i = 0; i < map->npcCount; i++) {
-         const NpcSpot *n = &map->npcs[i];
-         Color body = (Color){ 15, 10, 25, 255 };
-         if (n->label && n->label[0] == 'M') {
-             body = (Color){ 8, 8, 18, 255 };
-         }
-         DrawRectangleRounded(n->bounds, 0.3f, 6, body);
-     }
- 
-     // Lanterns
-     for (int i = 0; i < map->lanternCount; i++) {
-         const Lantern *l = &map->lanterns[i];
-         Color c = map->lanternsStrangeColors
-                   ? (Color){ 150, 40, 190, 255 }
-                   : (Color){ 255, 120, 80, 255 };
-         DrawCircleV(l->position, l->radius + 3.0f, (Color){ c.r, c.g, c.b, 60 });
-         DrawCircleV(l->position, l->radius, c);
-     }
- }
- 
- void Map_DrawForeground(const Map *map) {
-     // Subtle vignette
-     float w = map->bounds.width;
-     float h = map->bounds.height;
-     int steps = 8;
-     for (int i = 0; i < steps; i++) {
-         float t = (float)i / (float)steps;
-         unsigned char alpha = (unsigned char)(40 + t * 60.0f);
-         DrawRectangleLinesEx(
-             (Rectangle){
-                 map->bounds.x - t*10.0f,
-                 map->bounds.y - t*6.0f,
-                 w + t*20.0f,
-                 h + t*12.0f
-             },
-             1.0f,
-             (Color){ 0, 0, 0, alpha }
-         );
-     }
- }
+#include "map.h"
+#include "game.h"
+#include "raylib.h"
+#include <stdlib.h>
+
+static void BuildGeometry(Map *map, int screenWidth, int screenHeight);
+static void BuildInteractables(Map *map);
+static void BuildNpcs(Map *map);
+
+Map *Map_Create(int screenWidth, int screenHeight) {
+    Map *m = (Map *)malloc(sizeof(Map));
+    if (!m) return NULL;
+
+    m->bounds = (Rectangle){ 0.0f, 0.0f, (float)screenWidth, (float)screenHeight };
+    m->wallCount = 0;
+    m->interactableCount = 0;
+    m->npcCount = 0;
+    m->bloodMoon = false;
+
+    BuildGeometry(m, screenWidth, screenHeight);
+    BuildInteractables(m);
+    BuildNpcs(m);
+
+    return m;
+}
+
+void Map_Destroy(Map *map) {
+    if (map) free(map);
+}
+
+const Rectangle *Map_GetWalls(const Map *map, int *count) {
+    if (count) *count = map->wallCount;
+    return map->walls;
+}
+
+const Interactable *Map_GetInteractables(const Map *map, int *count) {
+    if (count) *count = map->interactableCount;
+    return map->interactables;
+}
+
+const NpcSpot *Map_GetNpcs(const Map *map, int *count) {
+    if (count) *count = map->npcCount;
+    return map->npcs;
+}
+
+MapRegion Map_GetRegionAt(const Map *map, float x, float y) {
+    if (CheckCollisionPointRec((Vector2){ x, y }, map->basementBounds)) return REGION_BASEMENT;
+    if (CheckCollisionPointRec((Vector2){ x, y }, map->freezerBounds)) return REGION_FREEZER;
+    if (CheckCollisionPointRec((Vector2){ x, y }, map->kitchenBounds)) return REGION_KITCHEN;
+    if (CheckCollisionPointRec((Vector2){ x, y }, map->cashierBounds)) return REGION_CASHIER;
+    if (CheckCollisionPointRec((Vector2){ x, y }, map->hallwayBounds)) return REGION_HALLWAY;
+    return REGION_HALLWAY;
+}
+
+static void BuildGeometry(Map *map, int screenWidth, int screenHeight) {
+    float m = 20.0f;
+    float w = (float)screenWidth - 2.0f * m;
+    float h = (float)screenHeight - 2.0f * m;
+
+    // Main play area
+    map->bounds = (Rectangle){ m, m, w, h };
+
+    // ---- Regions (for trigger logic) ----
+    // Kitchen: left third, backdoor + sink
+    map->kitchenBounds = (Rectangle){ m, m, w * 0.28f, h * 0.5f };
+    // Hallway: middle strip
+    map->hallwayBounds = (Rectangle){ m + w * 0.28f, m, w * 0.22f, h };
+    // Cashier / main floor: right side
+    map->cashierBounds = (Rectangle){ m + w * 0.5f, m, w * 0.5f - 20.0f, h * 0.65f };
+    // Freezer: small room off kitchen
+    map->freezerBounds = (Rectangle){ m + 30.0f, m + h * 0.52f, 100.0f, 90.0f };
+    // Basement: bottom area, reachable by stairs
+    map->basementBounds = (Rectangle){ m + w * 0.5f - 60.0f, m + h * 0.7f, 220.0f, h * 0.28f - 20.0f };
+
+    // ---- Walls: outer ----
+    map->walls[map->wallCount++] = (Rectangle){ m, m, w, 10.0f };
+    map->walls[map->wallCount++] = (Rectangle){ m, m + h - 10.0f, w, 10.0f };
+    map->walls[map->wallCount++] = (Rectangle){ m, m, 10.0f, h };
+    map->walls[map->wallCount++] = (Rectangle){ m + w - 10.0f, m, 10.0f, h };
+
+    // Kitchen / hallway divider
+    map->walls[map->wallCount++] = (Rectangle){ m + w * 0.28f, m, 8.0f, h * 0.52f };
+    // Hallway / cashier divider (with gap for door)
+    map->walls[map->wallCount++] = (Rectangle){ m + w * 0.5f - 10.0f, m, 10.0f, h * 0.35f };
+    map->walls[map->wallCount++] = (Rectangle){ m + w * 0.5f - 10.0f, m + h * 0.45f, 10.0f, h * 0.25f };
+    // Freezer walls
+    map->walls[map->wallCount++] = (Rectangle){ map->freezerBounds.x, map->freezerBounds.y, map->freezerBounds.width, 8.0f };
+    map->walls[map->wallCount++] = (Rectangle){ map->freezerBounds.x, map->freezerBounds.y + map->freezerBounds.height - 8.0f, map->freezerBounds.width, 8.0f };
+    map->walls[map->wallCount++] = (Rectangle){ map->freezerBounds.x, map->freezerBounds.y, 8.0f, map->freezerBounds.height };
+    map->walls[map->wallCount++] = (Rectangle){ map->freezerBounds.x + map->freezerBounds.width - 8.0f, map->freezerBounds.y, 8.0f, map->freezerBounds.height };
+    // Basement walls (pit)
+    map->walls[map->wallCount++] = (Rectangle){ map->basementBounds.x, map->basementBounds.y, map->basementBounds.width, 10.0f };
+    map->walls[map->wallCount++] = (Rectangle){ map->basementBounds.x, map->basementBounds.y + map->basementBounds.height - 10.0f, map->basementBounds.width, 10.0f };
+    map->walls[map->wallCount++] = (Rectangle){ map->basementBounds.x, map->basementBounds.y, 10.0f, map->basementBounds.height };
+    map->walls[map->wallCount++] = (Rectangle){ map->basementBounds.x + map->basementBounds.width - 10.0f, map->basementBounds.y, 10.0f, map->basementBounds.height };
+
+    // Counters / obstacles in kitchen
+    map->walls[map->wallCount++] = (Rectangle){ m + 50.0f, m + 120.0f, 80.0f, 25.0f };
+    map->walls[map->wallCount++] = (Rectangle){ m + 50.0f, m + 200.0f, 100.0f, 20.0f };
+    // Cashier counter
+    map->walls[map->wallCount++] = (Rectangle){ m + w * 0.52f, m + h * 0.4f, 180.0f, 22.0f };
+}
+
+static void BuildInteractables(Map *map) {
+    float m = map->bounds.x;
+    float w = map->bounds.width;
+    float h = map->bounds.height;
+
+    // Badge reader (kitchen, near backdoor)
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ m + 70.0f, m + 50.0f, 36.0f, 28.0f },
+        INTERACT_BADGE,
+        "Badge"
+    };
+    // Sink (kitchen)
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ m + 120.0f, m + 200.0f, 50.0f, 35.0f },
+        INTERACT_SINK,
+        "Sink"
+    };
+    // Mop bucket (hallway or cashier area)
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ m + w * 0.32f, m + h * 0.3f, 32.0f, 40.0f },
+        INTERACT_MOP,
+        "Mop"
+    };
+    // Radio (cashier counter)
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ m + w * 0.55f, m + h * 0.35f, 40.0f, 30.0f },
+        INTERACT_RADIO,
+        "Radio"
+    };
+    // Garbage bin (outside or kitchen exit)
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ m + w * 0.48f, m + h * 0.62f, 36.0f, 40.0f },
+        INTERACT_GARBAGE,
+        "Bin"
+    };
+    // Freezer door
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ map->freezerBounds.x + 20.0f, map->freezerBounds.y - 5.0f, 50.0f, 14.0f },
+        INTERACT_FREEZER_DOOR,
+        "Freezer"
+    };
+    // Basement stairs (top of stairs - go down)
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ m + w * 0.52f, m + h * 0.66f, 60.0f, 25.0f },
+        INTERACT_BASEMENT_STAIRS,
+        "Stairs"
+    };
+    // Basement stairs (from inside basement - go up)
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ map->basementBounds.x + map->basementBounds.width * 0.5f - 35.0f, map->basementBounds.y - 5.0f, 50.0f, 20.0f },
+        INTERACT_BASEMENT_STAIRS_UP,
+        "Stairs Up"
+    };
+    // Generator (basement)
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ map->basementBounds.x + 30.0f, map->basementBounds.y + 25.0f, 50.0f, 45.0f },
+        INTERACT_GENERATOR,
+        "Generator"
+    };
+    // Lockers (basement, three)
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ map->basementBounds.x + 100.0f, map->basementBounds.y + 20.0f, 28.0f, 55.0f },
+        INTERACT_LOCKER_1,
+        "Locker1"
+    };
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ map->basementBounds.x + 135.0f, map->basementBounds.y + 20.0f, 28.0f, 55.0f },
+        INTERACT_LOCKER_2,
+        "Locker2"
+    };
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ map->basementBounds.x + 170.0f, map->basementBounds.y + 20.0f, 28.0f, 55.0f },
+        INTERACT_LOCKER_3,
+        "Locker3"
+    };
+    // Clock out (kitchen, near badge)
+    map->interactables[map->interactableCount++] = (Interactable){
+        (Rectangle){ m + 70.0f, m + 85.0f, 36.0f, 22.0f },
+        INTERACT_CLOCK_OUT,
+        "Clock Out"
+    };
+}
+
+static void BuildNpcs(Map *map) {
+    float m = map->bounds.x;
+    float w = map->bounds.width;
+    float h = map->bounds.height;
+
+    // Customer positions at cashier (game will show/hide by day)
+    // Young lady - Day 2
+    map->npcs[map->npcCount++] = (NpcSpot){
+        (Rectangle){ m + w * 0.72f, m + h * 0.42f, 22.0f, 36.0f },
+        NPC_YOUNG_LADY,
+        "Lady"
+    };
+    // Old man eyepatch - Day 2
+    map->npcs[map->npcCount++] = (NpcSpot){
+        (Rectangle){ m + w * 0.72f, m + h * 0.42f, 22.0f, 36.0f },
+        NPC_OLD_MAN_EYEPATCH,
+        "Old Man"
+    };
+    // Teen boy - Day 3
+    map->npcs[map->npcCount++] = (NpcSpot){
+        (Rectangle){ m + w * 0.72f, m + h * 0.42f, 22.0f, 36.0f },
+        NPC_TEEN_BOY,
+        "Teen"
+    };
+    // Old lady (panic) - Day 3
+    map->npcs[map->npcCount++] = (NpcSpot){
+        (Rectangle){ m + w * 0.72f, m + h * 0.42f, 22.0f, 36.0f },
+        NPC_OLD_LADY,
+        "Old Lady"
+    };
+    // Creepy man (maggots) - Day 3
+    map->npcs[map->npcCount++] = (NpcSpot){
+        (Rectangle){ m + w * 0.72f, m + h * 0.42f, 22.0f, 36.0f },
+        NPC_CREEPY_MAN,
+        "Creepy"
+    };
+    // Shaman - Day 4
+    map->npcs[map->npcCount++] = (NpcSpot){
+        (Rectangle){ m + w * 0.72f, m + h * 0.42f, 22.0f, 36.0f },
+        NPC_SHAMAN,
+        "Shaman"
+    };
+}
+
+void Map_DrawBackground(const Map *map, const void *game) {
+    const Game *g = (const Game *)game;
+    (void)g;
+
+    ClearBackground((Color){ 8, 6, 18, 255 });
+
+    // Ground - main area
+    DrawRectangleRec(map->bounds, (Color){ 22, 22, 38, 255 });
+
+    // Kitchen - white/black tile feel (darker)
+    DrawRectangleRec(map->kitchenBounds, (Color){ 30, 28, 45, 255 });
+    DrawRectangleLinesEx(map->kitchenBounds, 2.0f, (Color){ 80, 75, 100, 255 });
+
+    // Hallway
+    DrawRectangleRec(map->hallwayBounds, (Color){ 18, 16, 32, 255 });
+
+    // Cashier / main floor
+    DrawRectangleRec(map->cashierBounds, (Color){ 28, 26, 42, 255 });
+    DrawRectangleLinesEx(map->cashierBounds, 1.0f, (Color){ 70, 65, 90, 255 });
+
+    // Freezer (cold blue tint)
+    DrawRectangleRec(map->freezerBounds, (Color){ 20, 30, 55, 255 });
+    DrawRectangleLinesEx(map->freezerBounds, 2.0f, (Color){ 60, 90, 140, 255 });
+
+    // Basement (darkest)
+    DrawRectangleRec(map->basementBounds, (Color){ 12, 10, 22, 255 });
+    DrawRectangleLinesEx(map->basementBounds, 2.0f, (Color){ 50, 45, 70, 255 });
+
+    // Interactables as labeled boxes
+    for (int i = 0; i < map->interactableCount; i++) {
+        const Interactable *in = &map->interactables[i];
+        Color c = (Color){ 50, 45, 70, 255 };
+        if (in->type == INTERACT_BADGE || in->type == INTERACT_CLOCK_OUT) c = (Color){ 60, 50, 80, 255 };
+        else if (in->type == INTERACT_RADIO) c = (Color){ 70, 40, 40, 255 };
+        else if (in->type == INTERACT_GENERATOR) c = (Color){ 45, 50, 45, 255 };
+        else if (in->type == INTERACT_LOCKER_1 || in->type == INTERACT_LOCKER_2 || in->type == INTERACT_LOCKER_3)
+            c = (Color){ 35, 35, 45, 255 };
+        DrawRectangleRounded(in->bounds, 0.15f, 4, c);
+        DrawRectangleLinesEx(in->bounds, 1.5f, (Color){ 120, 115, 140, 255 });
+        if (in->label)
+            DrawText(in->label, (int)(in->bounds.x + 4), (int)(in->bounds.y - 14), 11, (Color){ 200, 195, 220, 255 });
+    }
+
+    // NPCs (when visible - game controls which are active per day; we draw all positions, game can pass day and we only draw the right one, or game draws NPCs)
+    for (int i = 0; i < map->npcCount; i++) {
+        const NpcSpot *n = &map->npcs[i];
+        DrawRectangleRounded(n->bounds, 0.25f, 4, (Color){ 18, 14, 28, 255 });
+        DrawRectangleLinesEx(n->bounds, 1.0f, (Color){ 90, 85, 110, 255 });
+    }
+
+    // Blood moon through window (Day 4) - small window effect top right
+    if (map->bloodMoon) {
+        DrawCircle(map->bounds.x + map->bounds.width - 50.0f, map->bounds.y + 45.0f, 18.0f, (Color){ 80, 20, 20, 220 });
+        DrawCircle(map->bounds.x + map->bounds.width - 50.0f, map->bounds.y + 45.0f, 14.0f, (Color){ 140, 40, 40, 255 });
+    }
+}
+
+void Map_DrawForeground(const Map *map) {
+    (void)map;
+    // Vignette optional
+}
