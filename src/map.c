@@ -385,28 +385,28 @@ static void BuildGeometry(Map *map) {
 static void BuildInteractables(Map *map) {
     // Placement aligned to task-reference image, with larger practical interaction zones.
     map->interactables[map->interactableCount++] = (Interactable){
-        RR(611, 278, 40, 20),
-        RR(584, 264, 98, 54),
+        RR(528, 237, 40, 20),
+        RR(501, 223, 98, 54),
         INTERACT_BADGE,
         "Badge"
     };
     map->interactables[map->interactableCount++] = (Interactable){
-        RR(611, 300, 40, 20),
-        RR(584, 286, 98, 54),
+        RR(528, 259, 40, 20),
+        RR(501, 245, 98, 54),
         INTERACT_CLOCK_OUT,
         "Clock Out"
     };
     // Sink (kitchen top-left)
     map->interactables[map->interactableCount++] = (Interactable){
-        RR(10, 314, 96, 60),
-        RR(6, 312, 108, 66),
+        RR(10, 397, 96, 60),
+        RR(6, 395, 108, 66),
         INTERACT_SINK,
         "Sink"
     };
     // Garbage (kitchen left)
     map->interactables[map->interactableCount++] = (Interactable){
-        RR(4, 505, 76, 84),
-        RR(2, 500, 84, 92),
+        RR(4, 463, 76, 84),
+        RR(2, 458, 84, 92),
         INTERACT_GARBAGE,
         "Bin"
     };
@@ -419,15 +419,15 @@ static void BuildInteractables(Map *map) {
     };
     // Radio on cashier counter (main store top-right)
     map->interactables[map->interactableCount++] = (Interactable){
-        RR(611, 322, 40, 20),
-        RR(584, 308, 98, 54),
+        RR(528, 281, 40, 20),
+        RR(501, 267, 98, 54),
         INTERACT_RADIO,
         "Radio"
     };
     // Freezer (kitchen bottom-left, expired meat)
     map->interactables[map->interactableCount++] = (Interactable){
-        RR(0, 535, 90, 96),
-        RR(0, 532, 96, 102),
+        RR(0, 493, 90, 96),
+        RR(0, 490, 96, 102),
         INTERACT_FREEZER_DOOR,
         "Freezer"
     };

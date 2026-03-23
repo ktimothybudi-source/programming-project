@@ -33,6 +33,9 @@ typedef struct Player {
     Vector2 size;
     float speed;
     Color color;
+    Texture2D spriteLeft;
+    Texture2D spriteRight;
+    int facing; /* 0=left, 1=right */
 } Player;
 
 /* Create memory for a player and set starting values. */

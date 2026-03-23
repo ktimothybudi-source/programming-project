@@ -21,24 +21,32 @@
 static void MoveWithCollisions(Player *player, struct Map *map, Vector2 delta);
 static void ResolveAxisX(Player *player, struct Map *map, float oldX, float deltaX);
 static void ResolveAxisY(Player *player, struct Map *map, float oldY, float deltaY);
+static void LoadPlayerSprites(Player *player);
 
 Player *Player_Create(void) {
     /* malloc = ask the OS for memory; sizeof(Player) is how many bytes we need. */
     Player *p = (Player *)malloc(sizeof(Player));
     if (!p) return NULL;
 
-    /* size.x = width, size.y = height of the drawn rectangle in world units. */
-    p->size = (Vector2){ 22.0f, 30.0f };
+    /* Significantly larger sprite footprint: 8x the original (was 22x30). */
+    p->size = (Vector2){ 176.0f, 240.0f };
     /* Starting position (overwritten when a real day starts). */
     p->position = (Vector2){ 400.0f, 400.0f };
     /* How many pixels per second we move when a key is held (before dt scaling). */
     p->speed = 200.0f;
     p->color = (Color){ 240, 240, 255, 255 };
+    p->spriteLeft = (Texture2D){ 0 };
+    p->spriteRight = (Texture2D){ 0 };
+    p->facing = 1;
+    LoadPlayerSprites(p);
     return p;
 }
 
 void Player_Destroy(Player *player) {
-    if (player) free(player);
+    if (!player) return;
+    if (player->spriteLeft.id != 0) UnloadTexture(player->spriteLeft);
+    if (player->spriteRight.id != 0) UnloadTexture(player->spriteRight);
+    free(player);
 }
 
 /*
@@ -93,6 +101,9 @@ void Player_Update(Player *player, struct Map *map, float dt, bool canMove) {
     if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))  input.y += 1.0f;
     if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))  input.x -= 1.0f;
     if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) input.x += 1.0f;
+
+    if (input.x < 0.0f) player->facing = 0;
+    else if (input.x > 0.0f) player->facing = 1;
 
     float len = sqrtf(input.x * input.x + input.y * input.y);
     if (len > 0.0f) {
@@ -152,10 +163,21 @@ static void MoveWithCollisions(Player *player, struct Map *map, Vector2 delta) {
 
 void Player_Draw(const Player *player) {
     Rectangle r = Player_GetBounds(player);
+    Texture2D sprite = (Texture2D){ 0 };
+    if (player->facing == 0) sprite = player->spriteLeft;
+    else sprite = player->spriteRight;
 
-    DrawRectangleRounded(r, 0.3f, 6, player->color);
-    DrawRectangleLinesEx(r, 2.0f, (Color){ 180, 180, 220, 255 });
+    if (sprite.id != 0) {
+        Rectangle src = (Rectangle){ 0, 0, (float)sprite.width, (float)sprite.height };
+        DrawTexturePro(sprite, src, r, (Vector2){ 0, 0 }, 0.0f, WHITE);
+    } else {
+        DrawRectangleRounded(r, 0.3f, 6, player->color);
+        DrawRectangleLinesEx(r, 2.0f, (Color){ 180, 180, 220, 255 });
+        DrawCircle((int)player->position.x, (int)(player->position.y - player->size.y * 0.15f), 4.0f, (Color){ 30, 30, 50, 255 });
+    }
+}
 
-    /* Tiny dot so you can see which way is "up" on the placeholder. */
-    DrawCircle((int)player->position.x, (int)(player->position.y - player->size.y * 0.15f), 4.0f, (Color){ 30, 30, 50, 255 });
+static void LoadPlayerSprites(Player *player) {
+    if (FileExists("assets/player_left.png")) player->spriteLeft = LoadTexture("assets/player_left.png");
+    if (FileExists("assets/player_right.png")) player->spriteRight = LoadTexture("assets/player_right.png");
 }
