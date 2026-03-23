@@ -1,9 +1,26 @@
+/*
+ * ============================================================================
+ * dialogue.c — ALL STORY TEXT AS DATA + SIMPLE PLAYER CONTROLS
+ * ============================================================================
+ *
+ * HOW IT WORKS (read this first):
+ *   1) We store story as static arrays: INTRO_DAY1[], DAY2_RADIO_NEWS[], ...
+ *   2) SCRIPTS[] is a lookup table: SCRIPTS[DialogueId] = { pointer, line count }
+ *   3) Dialogue_Start selects a script and sets currentIndex = 0
+ *   4) Each time the player presses Space or Enter, we increment currentIndex
+ *   5) When currentIndex >= lineCount, we close dialogue and set justClosed = true
+ *
+ * GetScriptForId converts DialogueId to an index into SCRIPTS[] (must stay in sync
+ * with the enum order in dialogue.h).
+ * ============================================================================
+ */
+
 #include "dialogue.h"
 #include "game.h"
 #include "raylib.h"
 #include <stdlib.h>
 
-// ---- Day 1 ----
+/* ========================= Story content (Day 1) ========================= */
 static const DialogueLine INTRO_DAY1[] = {
     { "Narrator", "There lives an eighteen year old student named Paul\nwho studies at Beijing Institute of Technology." },
     { "Narrator", "Paul decided to apply for a job at Bohou's supermarket.\nHe got accepted for night shifts." },
@@ -24,7 +41,7 @@ static const DialogueLine DAY1_END_OF_DAY[] = {
     { "Narrator", "Paul closes the supermarket and goes back to his dormitory." }
 };
 
-// ---- Day 2 ----
+/* ========================= Story content (Day 2) ========================= */
 static const DialogueLine DAY2_RADIO_NEWS[] = {
     { "Radio", "Good evening everyone. Our top story tonight:\na well-known serial killer who calls himself Mike Hawk." },
     { "Radio", "He is currently on the run after murdering a family of four.\nHe was last seen near the lake of BeiHu." },
@@ -48,7 +65,7 @@ static const DialogueLine DAY2_END[] = {
     { "Paul", "Finally done. Everyone's going crazy over fake news.\nI'm clocking out." }
 };
 
-// ---- Day 3 ----
+/* ========================= Story content (Day 3) ========================= */
 static const DialogueLine DAY3_BOSS_CALL[] = {
     { "Boss", "Hello Paul, please take out the expired meat in the freezer\nand throw it in the garbage, thanks!" },
     { "Boss", "Oh yeah, and be careful. I heard there was a serial killer\nwandering around BeiHu yesterday. Please be cautious!" },
@@ -82,7 +99,7 @@ static const DialogueLine DAY3_END[] = {
     { "Paul", "Very sleepy. Time to clock out and go home." }
 };
 
-// ---- Day 4 ----
+/* ========================= Story content (Day 4 + ending) ========================= */
 static const DialogueLine DAY4_SHAMAN[] = {
     { "Shaman", "Your future can be in shambles." },
     { "Narrator", "The old lady dressed like a shaman didn't place anything on the desk.\nShe left through the exit." }
@@ -119,6 +136,10 @@ static const DialogueLine THE_END[] = {
     { "", "THE END" }
 };
 
+/*
+ * SCRIPTS[] must have the SAME ORDER as enum DialogueId in dialogue.h.
+ * Index 0 = DIALOGUE_NONE (empty). sizeof(array)/sizeof(array[0]) counts lines.
+ */
 static const DialogueScript SCRIPTS[] = {
     { NULL, 0 },
     { INTRO_DAY1, sizeof(INTRO_DAY1)/sizeof(INTRO_DAY1[0]) },
@@ -144,6 +165,7 @@ static const DialogueScript SCRIPTS[] = {
     { THE_END, sizeof(THE_END)/sizeof(THE_END[0]) }
 };
 
+/* Returns pointer into SCRIPTS[] or NULL if id is out of range. */
 static const DialogueScript *GetScriptForId(DialogueId id, const Game *game) {
     (void)game;
     int idx = (int)id;
@@ -167,6 +189,10 @@ void Dialogue_Destroy(DialogueSystem *dlg) {
     if (dlg) free(dlg);
 }
 
+/*
+ * Each frame: clear the "just closed" flag from last frame.
+ * If dialogue is active and player pressed Space/Enter, go to next line or close.
+ */
 void Dialogue_Update(DialogueSystem *dlg) {
     dlg->justClosed = false;
     if (!dlg->active || !dlg->current) return;
@@ -183,6 +209,7 @@ void Dialogue_Update(DialogueSystem *dlg) {
     }
 }
 
+/* Draw one rounded rectangle at bottom of screen + speaker + line + hint text. */
 void Dialogue_Draw(const DialogueSystem *dlg, int screenWidth, int screenHeight) {
     if (!dlg->active || !dlg->current) return;
 
@@ -211,6 +238,7 @@ void Dialogue_Draw(const DialogueSystem *dlg, int screenWidth, int screenHeight)
              (int)(box.y + box.height - 22), 12, (Color){ 180, 180, 200, 255 });
 }
 
+/* Load script by id, reset to first line, mark active. game is unused here but kept for API consistency. */
 void Dialogue_Start(DialogueSystem *dlg, DialogueId id, const Game *game) {
     const DialogueScript *s = GetScriptForId(id, game);
     if (!s || s->lineCount == 0) return;

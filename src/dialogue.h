@@ -1,3 +1,20 @@
+/*
+ * ============================================================================
+ * dialogue.h — IN-GAME TEXT BOXES (VISUAL NOVEL STYLE)
+ * ============================================================================
+ *
+ * A "dialogue script" is an ARRAY of lines. Each line has:
+ *   speaker — name shown at top of box (can be empty string)
+ *   text    — body text (can include \n for newline)
+ *
+ * DialogueId is an ENUM: a fixed list of named numbers. DIALOGUE_NONE = 0.
+ * dialogue.c contains a big table SCRIPTS[] where index matches DialogueId so
+ * Dialogue_Start(game, SOME_ID) looks up the right array of lines.
+ *
+ * While active, the player usually cannot move; game.c checks Dialogue_IsActive.
+ * ============================================================================
+ */
+
 #ifndef DIALOGUE_H
 #define DIALOGUE_H
 
@@ -14,27 +31,22 @@ typedef struct DialogueScript {
     int lineCount;
 } DialogueScript;
 
-// Story dialogue IDs: intro, days 1-4, customers, ending
 typedef enum DialogueId {
     DIALOGUE_NONE = 0,
-    // Intro / Day 1
     DIALOGUE_INTRO_DAY1,
     DIALOGUE_DAY1_CLOCKED_IN,
     DIALOGUE_DAY1_FIRST_CUSTOMERS,
     DIALOGUE_DAY1_END_OF_DAY,
-    // Day 2
     DIALOGUE_DAY2_RADIO_NEWS,
     DIALOGUE_DAY2_YOUNG_LADY,
     DIALOGUE_DAY2_OLD_MAN,
     DIALOGUE_DAY2_END,
-    // Day 3
     DIALOGUE_DAY3_BOSS_CALL,
     DIALOGUE_DAY3_FREEZER_DONE,
     DIALOGUE_DAY3_TEEN_BOY,
     DIALOGUE_DAY3_OLD_LADY,
     DIALOGUE_DAY3_CREEPY_MAN,
     DIALOGUE_DAY3_END,
-    // Day 4
     DIALOGUE_DAY4_SHAMAN,
     DIALOGUE_DAY4_LIGHTS_OUT,
     DIALOGUE_DAY4_GENERATOR_FIXED,
@@ -42,7 +54,6 @@ typedef enum DialogueId {
     DIALOGUE_DAY4_HIDE_IN_LOCKER,
     DIALOGUE_ENDING_1,
     DIALOGUE_THE_END,
-    // Count / placeholder
     DIALOGUE_COUNT
 } DialogueId;
 
@@ -66,4 +77,4 @@ void            Dialogue_Close(DialogueSystem *dlg);
 bool            Dialogue_IsActive(const DialogueSystem *dlg);
 bool            Dialogue_JustClosed(DialogueSystem *dlg);
 
-#endif // DIALOGUE_H
+#endif /* DIALOGUE_H */

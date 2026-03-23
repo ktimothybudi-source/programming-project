@@ -1,6 +1,12 @@
  @echo off
- REM Simple Windows (MinGW-w64) build script for BIT Anomalies – 夜市
- REM Assumes raylib is installed and RAYLIB_HOME points to its root (with include/ and lib/)
+ REM ============================================================================
+ REM BIT Anomalies – Windows (MinGW-w64) build
+ REM Set RAYLIB_HOME to raylib root (folders include\ and lib\).
+ REM
+ REM For assignment submission with fewer DLL issues, try:
+ REM   build_windows_static.bat
+ REM (requires raylib static libs; if it fails, use this script and ship DLLs.)
+ REM ============================================================================
  
  set TARGET=night_market.exe
  

@@ -1,3 +1,16 @@
+/*
+ * ============================================================================
+ * anomaly.c — UPDATE AND DRAW THE FLASH OVERLAY
+ * ============================================================================
+ *
+ * After the main game world is drawn, game.c calls Anomaly_DrawOverlay.
+ * That draws a semi-transparent rectangle over the ENTIRE screen (in screen
+ * pixels, not world coordinates), so it sits on top of everything for that frame.
+ *
+ * flashAlpha: 0 = invisible overlay, higher = more visible flash color.
+ * ============================================================================
+ */
+
 #include "anomaly.h"
 #include "game.h"
 #include "raylib.h"

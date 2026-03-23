@@ -1,3 +1,25 @@
+/*
+ * ============================================================================
+ * game.c — STORY LOGIC, CAMERA, INTERACTIONS, DRAW ORDER
+ * ============================================================================
+ *
+ * WHAT THIS FILE DOES (big picture):
+ *   - Owns the struct Game: creates map, player, dialogue, audio, UI, anomalies.
+ *   - Every frame: Game_Update reads input, moves player, checks collisions with
+ *     interactables, advances days, starts dialogue.
+ *   - Game_Draw draws world (with camera), then HUD, then dialogue on top.
+ *
+ * HOW TO READ THE CODE:
+ *   - Search for "GameState" to see which mode we are in.
+ *   - Game_HandleInteractions runs when player presses E; it uses a switch on
+ *     InteractableType (defined in map.h).
+ *   - Bool flags like clockedIn / moppingDone are the "memory" of what the player did.
+ *
+ * Sections marked "Code created by wu deguang": camera, spawn positions, on-screen
+ * "Press E" prompts.
+ * ============================================================================
+ */
+
 #include "game.h"
 #include "player.h"
 #include "map.h"
@@ -8,21 +30,30 @@
 #include "raylib.h"
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 static void Game_ChangeState(Game *game, GameState newState);
 static void Game_HandleInput(Game *game, float dt);
 static void Game_HandleInteractions(Game *game);
 static void Game_UpdateObjective(Game *game);
 static void Game_AdvanceDayIfReady(Game *game);
+/* True when player should walk around the store (not title / not pure ending screen). */
 static bool Game_IsPlayState(GameState s);
 
-// Paul spawn: kitchen backdoor area
-static const float SPAWN_DAY1_X = 120.0f;
-static const float SPAWN_DAY1_Y = 100.0f;
-static const float SPAWN_CASHIER_X = 420.0f;
-static const float SPAWN_BASEMENT_X = 450.0f;
-static const float SPAWN_BASEMENT_Y = 460.0f;
+/* Code created by wu deguang — world (pixel) coordinates where the player appears. */
+static const float SPAWN_KITCHEN_X = 550.0f;
+static const float SPAWN_KITCHEN_Y = 1500.0f;
+static const float SPAWN_CASHIER_X = 2400.0f;
+static const float SPAWN_CASHIER_Y = 400.0f;
+static const float SPAWN_BASEMENT_X = 1250.0f;
+static const float SPAWN_BASEMENT_Y = 3000.0f;
+static const float CAMERA_ZOOM = 0.65f;
+static const float CAMERA_SMOOTH = 8.0f;
 
+/*
+ * Allocate Game, then allocate each subsystem. If anything failed we'd need more checks;
+ * for this project we assume malloc succeeds except we check game pointer.
+ */
 Game *Game_Create(int screenWidth, int screenHeight) {
     Game *g = (Game *)malloc(sizeof(Game));
     if (!g) return NULL;
@@ -65,10 +96,17 @@ Game *Game_Create(int screenWidth, int screenHeight) {
 
     g->objectiveText = "Press Enter to begin.";
 
+    // Code created by wu deguang - Camera2D: center on screen, target kitchen spawn, zoom so one room fills screen
+    g->camera.offset = (Vector2){ (float)g->screenWidth * 0.5f, (float)g->screenHeight * 0.5f };
+    g->camera.target = (Vector2){ SPAWN_KITCHEN_X, SPAWN_KITCHEN_Y };
+    g->camera.rotation = 0.0f;
+    g->camera.zoom = CAMERA_ZOOM;
+
     Game_ChangeState(g, GAME_STATE_TITLE);
     return g;
 }
 
+/* Free in reverse order of creation; pointers become invalid after free. */
 void Game_Destroy(Game *game) {
     if (!game) return;
     Anomaly_Destroy(game->anomalies);
@@ -80,6 +118,10 @@ void Game_Destroy(Game *game) {
     free(game);
 }
 
+/*
+ * Full reset: destroy all subsystems and recreate fresh, then return to title.
+ * Used when player presses R (requestRestart).
+ */
 void Game_Restart(Game *game) {
     if (!game) return;
     Map_Destroy(game->map);
@@ -130,6 +172,10 @@ static bool Game_IsPlayState(GameState s) {
         || s == GAME_STATE_SCRIPTED_BLACKOUT || s == GAME_STATE_SCRIPTED_BASEMENT_CHASE;
 }
 
+/*
+ * Switch mode: reset timer, optionally move player, start dialogue, set blood moon, etc.
+ * This is how we go from INTRO -> DAY_1, or into blackout / ending.
+ */
 static void Game_ChangeState(Game *game, GameState newState) {
     game->state = newState;
     game->stateTime = 0.0f;
@@ -138,19 +184,19 @@ static void Game_ChangeState(Game *game, GameState newState) {
         Dialogue_Start(game->dialogue, DIALOGUE_INTRO_DAY1, game);
         UI_StartFade(game->ui, 0.0f, 0.6f);
     } else if (newState == GAME_STATE_DAY_1) {
-        game->player->position.x = SPAWN_DAY1_X;
-        game->player->position.y = SPAWN_DAY1_Y;
+        game->player->position.x = SPAWN_KITCHEN_X;
+        game->player->position.y = SPAWN_KITCHEN_Y;
     } else if (newState == GAME_STATE_DAY_2) {
-        game->player->position.x = SPAWN_DAY1_X;
-        game->player->position.y = SPAWN_DAY1_Y;
+        game->player->position.x = SPAWN_KITCHEN_X;
+        game->player->position.y = SPAWN_KITCHEN_Y;
         game->clockedIn = false;
         game->radioOn = false;
         game->dishesDone = false;
         game->moppingDone = false;
         game->garbageDone = false;
     } else if (newState == GAME_STATE_DAY_3) {
-        game->player->position.x = SPAWN_DAY1_X;
-        game->player->position.y = SPAWN_DAY1_Y;
+        game->player->position.x = SPAWN_KITCHEN_X;
+        game->player->position.y = SPAWN_KITCHEN_Y;
         game->clockedIn = false;
         game->radioOn = false;
         game->dishesDone = false;
@@ -158,8 +204,8 @@ static void Game_ChangeState(Game *game, GameState newState) {
         game->garbageDone = false;
     } else if (newState == GAME_STATE_DAY_4) {
         game->map->bloodMoon = true;
-        game->player->position.x = SPAWN_DAY1_X;
-        game->player->position.y = SPAWN_DAY1_Y;
+        game->player->position.x = SPAWN_KITCHEN_X;
+        game->player->position.y = SPAWN_KITCHEN_Y;
         game->clockedIn = false;
     } else if (newState == GAME_STATE_SCRIPTED_BLACKOUT) {
         game->lightsOff = true;
@@ -170,6 +216,10 @@ static void Game_ChangeState(Game *game, GameState newState) {
     }
 }
 
+/*
+ * Title: Enter starts intro. Esc toggles pause. R requests restart.
+ * Ending: Enter advances through final dialogue back to title.
+ */
 static void Game_HandleInput(Game *game, float dt) {
     (void)dt;
 
@@ -203,6 +253,7 @@ static void Game_HandleInput(Game *game, float dt) {
     }
 }
 
+/* When end-of-day conditions are met, bump currentDay and play closing dialogue. */
 static void Game_AdvanceDayIfReady(Game *game) {
     if (game->currentDay == 1 && game->clockedIn && game->moppingDone && game->dishesDone && game->garbageDone) {
         if (!Dialogue_IsActive(game->dialogue)) {
@@ -220,6 +271,11 @@ static void Game_AdvanceDayIfReady(Game *game) {
     }
 }
 
+/*
+ * If player pressed E: find overlapping interactable trigger, run the matching case.
+ * If none, but player is in cashier rectangle, serve the next customer by day.
+ * Early "return" after handling one thing so we do not trigger two actions at once.
+ */
 static void Game_HandleInteractions(Game *game) {
     if (!game || !game->player || !game->map) return;
     if (Dialogue_IsActive(game->dialogue)) return;
@@ -232,7 +288,8 @@ static void Game_HandleInteractions(Game *game) {
 
     for (int i = 0; i < n; i++) {
         const Interactable *in = &interactables[i];
-        if (!CheckCollisionRecs(playerRect, in->bounds)) continue;
+        Rectangle useZone = (in->triggerZone.width > 0 && in->triggerZone.height > 0) ? in->triggerZone : in->bounds;
+        if (!CheckCollisionRecs(playerRect, useZone)) continue;
 
         switch (in->type) {
             case INTERACT_BADGE:
@@ -285,7 +342,7 @@ static void Game_HandleInteractions(Game *game) {
             case INTERACT_BASEMENT_STAIRS_UP:
                 if (game->state == GAME_STATE_DAY_4 && game->generatorFixed && game->inBasement && !game->day4FootstepsStarted) {
                     game->player->position.x = SPAWN_CASHIER_X;
-                    game->player->position.y = 380.0f;
+                    game->player->position.y = 900.0f;
                     game->inBasement = false;
                     game->day4FootstepsStarted = true;
                     Dialogue_Start(game->dialogue, DIALOGUE_DAY4_FOOTSTEPS, game);
@@ -354,6 +411,44 @@ static void Game_HandleInteractions(Game *game) {
     (void)npcs;
 }
 
+// Code created by wu deguang - returns the "Press E to ..." string for an interactable based on game state
+static const char *Game_GetInteractPrompt(const Game *game, const Interactable *in) {
+    if (!game || !in) return NULL;
+    switch (in->type) {
+        case INTERACT_BADGE: return game->clockedIn ? NULL : "Press E to Clock In";
+        case INTERACT_CLOCK_OUT: return (game->currentDay == 1 && game->clockedIn && game->moppingDone && game->dishesDone && game->garbageDone) ? "Press E to Clock Out" : NULL;
+        case INTERACT_SINK: return !game->dishesDone ? "Press E to Wash Dishes" : NULL;
+        case INTERACT_MOP: return !game->moppingDone ? "Press E to Mop the Floor" : NULL;
+        case INTERACT_RADIO: return !game->radioOn ? "Press E to Turn On Radio" : NULL;
+        case INTERACT_GARBAGE: return !game->garbageDone ? "Press E to Take Out Garbage" : NULL;
+        case INTERACT_FREEZER_DOOR: return (game->currentDay == 3 && !game->day3FreezerDone) ? "Press E to Remove Expired Meat" : NULL;
+        case INTERACT_BASEMENT_STAIRS: return (game->state == GAME_STATE_DAY_4 && game->lightsOff && !game->inBasement) ? "Press E to Go Downstairs" : NULL;
+        case INTERACT_BASEMENT_STAIRS_UP: return (game->state == GAME_STATE_DAY_4 && game->generatorFixed && game->inBasement && !game->day4FootstepsStarted) ? "Press E to Go Upstairs" : NULL;
+        case INTERACT_GENERATOR: return (game->inBasement && !game->generatorFixed) ? "Press E to Fix Generator" : NULL;
+        case INTERACT_LOCKER_1:
+        case INTERACT_LOCKER_2:
+        case INTERACT_LOCKER_3: return (game->state == GAME_STATE_SCRIPTED_BASEMENT_CHASE && !game->hidingInLocker) ? "Press E to Hide" : NULL;
+        default: return NULL;
+    }
+}
+
+// Code created by wu deguang - "Press E to Serve Customer" / "Meet the Shaman" when at cashier
+static const char *Game_GetCashierPrompt(const Game *game) {
+    if (!game) return NULL;
+    if (game->currentDay == 2) {
+        if (!game->day2YoungLadyServed) return "Press E to Serve Customer";
+        if (!game->day2OldManServed) return "Press E to Serve Customer";
+    }
+    if (game->currentDay == 3) {
+        if (!game->day3TeenBoyServed) return "Press E to Serve Customer";
+        if (!game->day3OldLadyServed) return "Press E to Serve Customer";
+        if (!game->day3CreepyManServed) return "Press E to Serve Customer";
+    }
+    if (game->currentDay == 4 && !game->day4ShamanLeft) return "Press E to Meet the Shaman";
+    return NULL;
+}
+
+/* Sets objectiveText pointer to a string literal — shown in HUD top-left. */
 static void Game_UpdateObjective(Game *game) {
     if (game->state == GAME_STATE_TITLE) {
         game->objectiveText = "Press Enter to begin.";
@@ -406,6 +501,11 @@ static void Game_UpdateObjective(Game *game) {
     }
 }
 
+/*
+ * Central per-frame update: input, optional restart, UI/dialogue/audio tick,
+ * then branch on state (intro vs play vs ending). Play state moves player,
+ * updates camera, checks story timers, interactions, day advancement.
+ */
 void Game_Update(Game *game, float dt) {
     if (!game) return;
 
@@ -434,6 +534,16 @@ void Game_Update(Game *game, float dt) {
         if (allowWorldUpdate) {
             Player_Update(game->player, game->map, dt, !Dialogue_IsActive(game->dialogue));
             game->inBasement = (Map_GetRegionAt(game->map, game->player->position.x, game->player->position.y) == REGION_BASEMENT);
+
+            // Code created by wu deguang - smooth camera follow, clamped to world bounds
+            float hw = (game->screenWidth * 0.5f) / game->camera.zoom;
+            float hh = (game->screenHeight * 0.5f) / game->camera.zoom;
+            game->camera.target.x += (game->player->position.x - game->camera.target.x) * CAMERA_SMOOTH * dt;
+            game->camera.target.y += (game->player->position.y - game->camera.target.y) * CAMERA_SMOOTH * dt;
+            if (game->camera.target.x < hw) game->camera.target.x = hw;
+            if (game->camera.target.x > WORLD_WIDTH - hw) game->camera.target.x = WORLD_WIDTH - hw;
+            if (game->camera.target.y < hh) game->camera.target.y = hh;
+            if (game->camera.target.y > WORLD_HEIGHT - hh) game->camera.target.y = WORLD_HEIGHT - hh;
 
             if (game->currentDay == 3 && !game->day3BossCallHeard && game->stateTime > 2.0f) {
                 game->day3BossCallHeard = true;
@@ -475,6 +585,11 @@ void Game_Update(Game *game, float dt) {
     Game_UpdateObjective(game);
 }
 
+/*
+ * Draw order matters: title is just UI. In gameplay, BeginMode2D applies the camera
+ * transform so map coordinates match world space. After EndMode2D, coordinates are
+ * screen pixels again (HUD, dialogue, "Press E" bar).
+ */
 void Game_Draw(Game *game) {
     if (!game) return;
 
@@ -496,19 +611,46 @@ void Game_Draw(Game *game) {
         return;
     }
 
-    Map_DrawBackground(game->map, game);
+    BeginMode2D(game->camera);
+    Map_DrawBackground(game->map, game->player->position.y);
     if (!game->hidingInLocker)
         Player_Draw(game->player);
-    Map_DrawForeground(game->map);
+    Map_DrawForeground(game->map, game->player->position.y);
+
+    if (game->lightsOff) {
+        if (!game->inBasement) {
+            DrawCircleV(game->player->position, 180.0f, (Color){ 15, 15, 25, 180 });
+        }
+    }
+    EndMode2D();
 
     if (game->lightsOff) {
         DrawRectangle(0, 0, game->screenWidth, game->screenHeight, (Color){ 0, 0, 0, 220 });
-        if (!game->inBasement) {
-            DrawCircle((int)game->player->position.x, (int)game->player->position.y, 80.0f, (Color){ 15, 15, 25, 180 });
-        }
     }
 
     Anomaly_DrawOverlay(game->anomalies);
+
+    // Code created by wu deguang - on-screen "Press E to ..." prompt when player is in an interactable's trigger zone
+    if (!Dialogue_IsActive(game->dialogue) && Game_IsPlayState(game->state)) {
+        Rectangle playerRect = Player_GetBounds(game->player);
+        const char *prompt = NULL;
+        int n = 0;
+        const Interactable *interactables = Map_GetInteractables(game->map, &n);
+        for (int i = 0; i < n; i++) {
+            Rectangle useZone = (interactables[i].triggerZone.width > 0 && interactables[i].triggerZone.height > 0) ? interactables[i].triggerZone : interactables[i].bounds;
+            if (CheckCollisionRecs(playerRect, useZone)) {
+                prompt = Game_GetInteractPrompt(game, &interactables[i]);
+                break;
+            }
+        }
+        if (!prompt && game->map->cashierBounds.width > 0 && CheckCollisionRecs(playerRect, game->map->cashierBounds))
+            prompt = Game_GetCashierPrompt(game);
+        if (prompt) {
+            int pw = MeasureText(prompt, 18);
+            DrawRectangle(game->screenWidth/2 - pw/2 - 12, game->screenHeight - 56, pw + 24, 32, (Color){ 10, 10, 20, 230 });
+            DrawText(prompt, game->screenWidth/2 - pw/2, game->screenHeight - 50, 18, (Color){ 240, 235, 255, 255 });
+        }
+    }
 
     UI_DrawHUD(game->ui, game->screenWidth, game->screenHeight, game->objectiveText, game->paused);
     Dialogue_Draw(game->dialogue, game->screenWidth, game->screenHeight);
