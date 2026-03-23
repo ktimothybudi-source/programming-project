@@ -30,6 +30,12 @@
 
 /* Design-time coordinates × WORLD_SCALE — keeps geometry in sync with WORLD_WIDTH/HEIGHT. */
 #define M(x) ((float)(x) * WORLD_SCALE)
+/* Reference image pixels (Badge_Clock_out...png / map_blueprint dimensions). */
+#define REF_IMG_W 682.0f
+#define REF_IMG_H 1024.0f
+#define RX(x) (((float)(x) / REF_IMG_W) * WORLD_WIDTH)
+#define RY(y) (((float)(y) / REF_IMG_H) * WORLD_HEIGHT)
+#define RR(x, y, w, h) (Rectangle){ RX(x), RY(y), RX(x + (w)) - RX(x), RY(y + (h)) - RY(y) }
 
 /* Static obstacle rectangles — shared by BuildGeometry (walls) and procedural drawing. */
 static const Rectangle OB_SHELF_NW   = { M(200), M(200), M(350), M(280) };
@@ -63,9 +69,150 @@ static const Rectangle OB_FLOOR_RIGHT_BACK_OUTLINE = { M(1400), M(1200), M(800),
 static void BuildGeometry(Map *map);
 static void BuildInteractables(Map *map);
 static void BuildNpcs(Map *map);
+static void Map_LoadTaskZonesFromMask(Map *map);
 
 static bool IsRedMaskColor(Color c) {
     return (c.r > 200 && c.g < 90 && c.b < 90);
+}
+
+static bool IsNearColor(Color c, Color t, int tol) {
+    return abs((int)c.r - (int)t.r) <= tol
+        && abs((int)c.g - (int)t.g) <= tol
+        && abs((int)c.b - (int)t.b) <= tol;
+}
+
+static Interactable *FindInteractableByType(Map *map, InteractableType type) {
+    for (int i = 0; i < map->interactableCount; i++) {
+        if (map->interactables[i].type == type) return &map->interactables[i];
+    }
+    return NULL;
+}
+
+static bool FindMaskRegion(Image *img, Color target, Rectangle *outPx) {
+    const int tol = 12;
+    int minX = img->width, minY = img->height;
+    int maxX = -1, maxY = -1;
+
+    for (int y = 0; y < img->height; y++) {
+        for (int x = 0; x < img->width; x++) {
+            Color c = GetImageColor(*img, x, y);
+            if (!IsNearColor(c, target, tol)) continue;
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+        }
+    }
+
+    if (maxX < minX || maxY < minY) return false;
+    *outPx = (Rectangle){ (float)minX, (float)minY, (float)(maxX - minX + 1), (float)(maxY - minY + 1) };
+    return true;
+}
+
+static Rectangle PxRectToWorld(Rectangle rPx, int imgW, int imgH) {
+    float x = (rPx.x / (float)imgW) * WORLD_WIDTH;
+    float y = (rPx.y / (float)imgH) * WORLD_HEIGHT;
+    float w = (rPx.width / (float)imgW) * WORLD_WIDTH;
+    float h = (rPx.height / (float)imgH) * WORLD_HEIGHT;
+    return (Rectangle){ x, y, w, h };
+}
+
+static Rectangle BuildDefaultTriggerFromBounds(Rectangle b) {
+    float padX = b.width * 0.12f;
+    float h = fmaxf(14.0f, b.height * 0.5f);
+    return (Rectangle){ b.x - padX, b.y + b.height, b.width + padX * 2.0f, h };
+}
+
+static void Map_LoadTaskZonesFromMask(Map *map) {
+    const char *path = "assets/task_mask.png";
+    if (!FileExists(path)) return;
+
+    Image img = LoadImage(path);
+    if (!img.data || img.width <= 0 || img.height <= 0) {
+        if (img.data) UnloadImage(img);
+        return;
+    }
+
+    Rectangle px = {0};
+
+    // Blue maps to Badge + Clock Out + Radio (split into three stacked bands).
+    if (FindMaskRegion(&img, (Color){ 0, 0, 255, 255 }, &px)) {
+        Interactable *badge = FindInteractableByType(map, INTERACT_BADGE);
+        Interactable *clockOut = FindInteractableByType(map, INTERACT_CLOCK_OUT);
+        Interactable *radio = FindInteractableByType(map, INTERACT_RADIO);
+        float bandH = px.height / 3.0f;
+        Rectangle rBadge = { px.x, px.y, px.width, bandH };
+        Rectangle rClock = { px.x, px.y + bandH, px.width, bandH };
+        Rectangle rRadio = { px.x, px.y + bandH * 2.0f, px.width, px.height - bandH * 2.0f };
+        if (badge) {
+            badge->bounds = PxRectToWorld(rBadge, img.width, img.height);
+            badge->triggerZone = BuildDefaultTriggerFromBounds(badge->bounds);
+        }
+        if (clockOut) {
+            clockOut->bounds = PxRectToWorld(rClock, img.width, img.height);
+            clockOut->triggerZone = BuildDefaultTriggerFromBounds(clockOut->bounds);
+        }
+        if (radio) {
+            radio->bounds = PxRectToWorld(rRadio, img.width, img.height);
+            radio->triggerZone = BuildDefaultTriggerFromBounds(radio->bounds);
+        }
+    }
+
+    // Green = Sink
+    if (FindMaskRegion(&img, (Color){ 0, 255, 0, 255 }, &px)) {
+        Interactable *it = FindInteractableByType(map, INTERACT_SINK);
+        if (it) {
+            it->bounds = PxRectToWorld(px, img.width, img.height);
+            it->triggerZone = BuildDefaultTriggerFromBounds(it->bounds);
+        }
+    }
+
+    // Yellow = Bin
+    if (FindMaskRegion(&img, (Color){ 255, 255, 0, 255 }, &px)) {
+        Interactable *it = FindInteractableByType(map, INTERACT_GARBAGE);
+        if (it) {
+            it->bounds = PxRectToWorld(px, img.width, img.height);
+            it->triggerZone = BuildDefaultTriggerFromBounds(it->bounds);
+        }
+    }
+
+    // Purple = Freezer
+    if (FindMaskRegion(&img, (Color){ 128, 0, 255, 255 }, &px)) {
+        Interactable *it = FindInteractableByType(map, INTERACT_FREEZER_DOOR);
+        if (it) {
+            it->bounds = PxRectToWorld(px, img.width, img.height);
+            it->triggerZone = BuildDefaultTriggerFromBounds(it->bounds);
+        }
+    }
+
+    // Orange = Mop
+    if (FindMaskRegion(&img, (Color){ 255, 128, 0, 255 }, &px)) {
+        Interactable *it = FindInteractableByType(map, INTERACT_MOP);
+        if (it) {
+            it->bounds = PxRectToWorld(px, img.width, img.height);
+            it->triggerZone = BuildDefaultTriggerFromBounds(it->bounds);
+        }
+    }
+
+    // Pink = Generator
+    if (FindMaskRegion(&img, (Color){ 255, 0, 255, 255 }, &px)) {
+        Interactable *it = FindInteractableByType(map, INTERACT_GENERATOR);
+        if (it) {
+            it->bounds = PxRectToWorld(px, img.width, img.height);
+            it->triggerZone = BuildDefaultTriggerFromBounds(it->bounds);
+        }
+    }
+
+    // Red = Lockers (single combined task zone)
+    if (FindMaskRegion(&img, (Color){ 255, 0, 0, 255 }, &px)) {
+        Interactable *it = FindInteractableByType(map, INTERACT_LOCKER_1);
+        if (it) {
+            it->bounds = PxRectToWorld(px, img.width, img.height);
+            it->triggerZone = BuildDefaultTriggerFromBounds(it->bounds);
+        }
+    }
+
+    UnloadImage(img);
 }
 
 bool Map_RectBlocked(const Map *map, Rectangle r) {
@@ -177,6 +324,7 @@ Map *Map_Create(int screenWidth, int screenHeight) {
     BuildGeometry(m);
     BuildInteractables(m);
     BuildNpcs(m);
+    Map_LoadTaskZonesFromMask(m);
     Map_LoadCollisionMask(m);
 
     if (FileExists("assets/map_blueprint.png")) {
@@ -228,100 +376,74 @@ static void BuildGeometry(Map *map) {
     // Region bounds
     map->kitchenBounds   = (Rectangle){ 0, M(1200), M(1100), M(1000) };
     map->hallwayBounds   = (Rectangle){ M(1100), M(1200), M(300), M(1000) };
-    map->cashierBounds   = (Rectangle){ M(2200), 0, M(600), M(450) };
+    map->cashierBounds   = RR(536, 0, 146, 121);
     map->freezerBounds   = (Rectangle){ M(50), M(2050), M(550), M(130) };
     map->basementBounds  = (Rectangle){ 0, M(2200), W, M(1600) };
 }
 
 // Code created by wu deguang - each interactable has bounds (object) and triggerZone (where to stand to press E)
 static void BuildInteractables(Map *map) {
-    // Badge reader (kitchen, near hallway entrance) - clock in / clock out
+    // Placement aligned to task-reference image, with larger practical interaction zones.
     map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(950), M(1280), M(100), M(60) },
-        (Rectangle){ M(850), M(1300), M(110), M(80) },
+        RR(611, 278, 40, 20),
+        RR(584, 264, 98, 54),
         INTERACT_BADGE,
         "Badge"
     };
     map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(950), M(1340), M(100), M(45) },
-        (Rectangle){ M(850), M(1360), M(110), M(70) },
+        RR(611, 300, 40, 20),
+        RR(584, 286, 98, 54),
         INTERACT_CLOCK_OUT,
         "Clock Out"
     };
     // Sink (kitchen top-left)
     map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(80), M(1210), M(220), M(140) },
-        (Rectangle){ M(80), M(1360), M(240), M(70) },
+        RR(10, 314, 96, 60),
+        RR(6, 312, 108, 66),
         INTERACT_SINK,
         "Sink"
     };
     // Garbage (kitchen left)
     map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(120), M(1950), M(100), M(130) },
-        (Rectangle){ M(100), M(2090), M(140), M(55) },
+        RR(4, 505, 76, 84),
+        RR(2, 500, 84, 92),
         INTERACT_GARBAGE,
         "Bin"
     };
-    // Mop (janitor far right)
+    // Mop bucket on the right side of janitor room
     map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(2050), M(1580), M(130), M(60) },
-        (Rectangle){ M(1920), M(1590), M(130), M(80) },
+        RR(558, 368, 116, 128),
+        RR(552, 362, 124, 136),
         INTERACT_MOP,
         "Mop"
     };
-    // Radio on cashier counter (main store top-right) - Day 2 turn on radio; customers use cashierBounds in game logic
+    // Radio on cashier counter (main store top-right)
     map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(2580), M(120), M(80), M(60) },
-        (Rectangle){ M(2560), M(200), M(120), M(100) },
+        RR(611, 322, 40, 20),
+        RR(584, 308, 98, 54),
         INTERACT_RADIO,
         "Radio"
     };
     // Freezer (kitchen bottom-left, expired meat)
     map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(50), M(2050), M(230), M(130) },
-        (Rectangle){ M(50), M(2190), M(230), M(65) },
+        RR(0, 535, 90, 96),
+        RR(0, 532, 96, 102),
         INTERACT_FREEZER_DOOR,
         "Freezer"
     };
-    // Basement stairs down (hallway bottom)
+    // Generator machine (basement left)
     map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(1100), M(2120), M(300), M(80) },
-        (Rectangle){ M(1150), M(2080), M(200), M(55) },
-        INTERACT_BASEMENT_STAIRS,
-        "Stairs"
-    };
-    // Basement stairs up
-    map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(1100), M(2200), M(300), M(180) },
-        (Rectangle){ M(1150), M(2390), M(200), M(65) },
-        INTERACT_BASEMENT_STAIRS_UP,
-        "Stairs Up"
-    };
-    // Generator (basement left)
-    map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(200), M(2350), M(450), M(500) },
-        (Rectangle){ M(200), M(2860), M(450), M(85) },
+        RR(20, 700, 210, 126),
+        RR(16, 694, 218, 134),
         INTERACT_GENERATOR,
         "Generator"
     };
-    // Lockers (basement right)
+    // Lockers (basement right) as one combined interaction.
     map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(2080), M(2500), M(140), M(620) },
-        (Rectangle){ M(2080), M(3130), M(140), M(65) },
+        RR(490, 694, 148, 154),
+        RR(486, 688, 156, 162),
         INTERACT_LOCKER_1,
-        "Locker1"
-    };
-    map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(2220), M(2500), M(140), M(620) },
-        (Rectangle){ M(2220), M(3130), M(140), M(65) },
-        INTERACT_LOCKER_2,
-        "Locker2"
-    };
-    map->interactables[map->interactableCount++] = (Interactable){
-        (Rectangle){ M(2360), M(2500), M(140), M(620) },
-        (Rectangle){ M(2360), M(3130), M(140), M(65) },
-        INTERACT_LOCKER_3,
-        "Locker3"
+        "Lockers"
     };
 }
 
@@ -405,10 +527,15 @@ void Map_DrawBackground(const Map *map, float playerY) {
     }
 
     // Interactable labels (behind player only when procedural; when image used, draw all)
+    const int labelFontSize = 26;
     for (int i = 0; i < map->interactableCount; i++) {
         const Interactable *in = &map->interactables[i];
-        if (in->label && rect_center_y(in->bounds) < playerY)
-            DrawText(in->label, (int)(in->bounds.x + 4), (int)(in->bounds.y - 14), 12, (Color){ 200, 195, 220, 255 });
+        if (in->label && rect_center_y(in->bounds) < playerY) {
+            int tw = MeasureText(in->label, labelFontSize);
+            int tx = (int)(in->bounds.x + in->bounds.width * 0.5f - (float)tw * 0.5f);
+            int ty = (int)(in->bounds.y - (float)labelFontSize - 8.0f);
+            DrawText(in->label, tx, ty, labelFontSize, (Color){ 200, 195, 220, 255 });
+        }
     }
     for (int i = 0; i < map->npcCount; i++) {
         const NpcSpot *n = &map->npcs[i];
@@ -460,10 +587,15 @@ void Map_DrawForeground(const Map *map, float playerY) {
         if (rect_center_y(OB_STAIRS_UP) >= playerY) DrawRectangleRec(OB_STAIRS_UP, (Color){ 35, 32, 42, 255 });
     }
 
+    const int labelFontSize = 26;
     for (int i = 0; i < map->interactableCount; i++) {
         const Interactable *in = &map->interactables[i];
-        if (in->label && rect_center_y(in->bounds) >= playerY)
-            DrawText(in->label, (int)(in->bounds.x + 4), (int)(in->bounds.y - 14), 12, (Color){ 200, 195, 220, 255 });
+        if (in->label && rect_center_y(in->bounds) >= playerY) {
+            int tw = MeasureText(in->label, labelFontSize);
+            int tx = (int)(in->bounds.x + in->bounds.width * 0.5f - (float)tw * 0.5f);
+            int ty = (int)(in->bounds.y - (float)labelFontSize - 8.0f);
+            DrawText(in->label, tx, ty, labelFontSize, (Color){ 200, 195, 220, 255 });
+        }
     }
     for (int i = 0; i < map->npcCount; i++) {
         const NpcSpot *n = &map->npcs[i];

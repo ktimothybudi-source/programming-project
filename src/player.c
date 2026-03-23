@@ -32,7 +32,7 @@ Player *Player_Create(void) {
     /* Starting position (overwritten when a real day starts). */
     p->position = (Vector2){ 400.0f, 400.0f };
     /* How many pixels per second we move when a key is held (before dt scaling). */
-    p->speed = 140.0f;
+    p->speed = 200.0f;
     p->color = (Color){ 240, 240, 255, 255 };
     return p;
 }

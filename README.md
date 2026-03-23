@@ -50,6 +50,20 @@
  Place a PNG at **`assets/collision_mask.png`** (same aspect ratio as the playable map, i.e. **2800×3800** design space). **Red** pixels (`R > 200`, `G` and `B` low) become **blocked** collision; everything else is walkable. The image is downsampled (longest side at most 1024px) when building the internal grid. If the file is missing, there is **no** solid collision (you can walk through everything).
  
  Optional: **`assets/map_blueprint.png`** is drawn as the background when present; it does not define collision—only the red mask does.
+
+### Task mask (optional, for pixel-perfect interactable placement)
+
+If present, **`assets/task_mask.png`** overrides interactable positions from a color-coded mask mapped to world space (same image alignment concept as collision). Supported colors:
+
+- Blue `#0000FF`: Badge + Clock Out + Radio (split into 3 stacked bands)
+- Green `#00FF00`: Sink
+- Yellow `#FFFF00`: Bin
+- Purple `#8000FF`: Freezer
+- Orange `#FF8000`: Mop
+- Pink `#FF00FF`: Generator
+- Red `#FF0000`: Lockers (single combined locker interaction)
+
+If `assets/task_mask.png` is missing, the game uses the built-in default task zones.
  
  ---
  
