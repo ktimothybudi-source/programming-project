@@ -1,0 +1,25 @@
+# Build outputs / backups
+*.save
+night_market
+night_market.exe
+*.o
+*.obj
+*.exe
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Optional: keep assets folder but ignore large/binary if added later
+# assets/audio/*.ogg
+# assets/audio/*.wav

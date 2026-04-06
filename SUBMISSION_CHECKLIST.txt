@@ -1,0 +1,41 @@
+================================================================================
+  ASSIGNMENT SUBMISSION CHECKLIST (BIT Anomalies / nightmarket)
+================================================================================
+
+Before zipping, verify:
+
+[ ] 1. SOURCE CODE
+    - All .c and .h files under src/ are included.
+    - No accidental deletion of main.c, game.c, map.c, etc.
+
+[ ] 2. ASSETS
+    - assets/map_blueprint.png (if you use the image background)
+    - Any audio under assets/ if referenced by code
+
+[ ] 3. DOCUMENTATION (readme.pdf or readme.doc — NOT only GitHub README.md)
+    - Use readme_DOCUMENTATION.md as the master: open in Word/Google Docs,
+      add Figure A–D screenshots, then Save As PDF or .docx renamed to readme.pdf / readme.doc
+    - Section 8 "AI usage" must stay filled in / accurate.
+
+[ ] 4. EXECUTABLE
+    - Windows: night_market.exe built on a Windows machine (MinGW + raylib).
+    - Prefer build_windows_static.bat if it links successfully (fewer DLL issues).
+    - Test the .exe on a clean PC or VM without your compiler installed.
+    - macOS graders: include note that ./night_market is the mac build OR provide .exe only if course requires Windows.
+
+[ ] 5. DEMO VIDEO
+    - Short screen recording with narration (see readme_DOCUMENTATION.md §7.3).
+    - Prefer MP4; keep under submission size limit.
+
+[ ] 6. CLEAN THE FOLDER (reduce zip size, avoid junk)
+    - Remove: *.o, *.obj, backup files, .DS_Store (optional), editor temp files.
+    - Do NOT remove: src/, assets/, Makefile, build scripts, documentation.
+    - Optional: remove .git/ if the assignment wants only a snapshot (course-specific).
+
+[ ] 7. SIZE
+    - Stay under 250 MB (or use forum / Baidu link per instructor rules).
+
+[ ] 8. FORUM + LMS
+    - Upload per course: assignment portal AND Warzone forum if required.
+
+================================================================================
