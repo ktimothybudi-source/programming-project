@@ -17,15 +17,25 @@ if "%RAYLIB_HOME%"=="" (
 )
 
 set SRC_DIR=src
-set SRCS=%SRC_DIR%\main.c %SRC_DIR%\game.c %SRC_DIR%\player.c %SRC_DIR%\map.c %SRC_DIR%\dialogue.c %SRC_DIR%\anomaly.c %SRC_DIR%\audio.c %SRC_DIR%\ui.c
+set SRCS=%SRC_DIR%\main.c %SRC_DIR%\game.c %SRC_DIR%\player.c %SRC_DIR%\map.c %SRC_DIR%\dialogue.c %SRC_DIR%\anomaly.c %SRC_DIR%\audio.c %SRC_DIR%\ui.c %SRC_DIR%\minigames\minigames.c %SRC_DIR%\intro_video_stub.c
+
+where gcc >nul 2>&1
+if errorlevel 1 (
+    echo gcc not found. Use MinGW on PATH or build_windows_msys2.sh in MSYS2.
+    goto :eof
+)
+if "%RAYLIB_HOME%"=="" (
+    echo Set RAYLIB_HOME to raylib root.
+    goto :eof
+)
 
 echo Building %TARGET% with -static (may take longer to link) ...
 
-gcc %SRCS% -o %TARGET% ^
-  -I%RAYLIB_HOME%\include ^
-  -L%RAYLIB_HOME%\lib ^
+gcc -std=c99 -Wall -Wextra -O2 %SRCS% -o %TARGET% ^
+  -I"%RAYLIB_HOME%\include" ^
+  -L"%RAYLIB_HOME%\lib" ^
   -static -static-libgcc ^
-  -lraylib -lopengl32 -lgdi32 -lwinmm
+  -lraylib -lopengl32 -lgdi32 -lwinmm -lshell32 -lm
 
 if errorlevel 1 (
     echo Static build failed. Try build_windows.bat without -static, or verify raylib MinGW libs.
