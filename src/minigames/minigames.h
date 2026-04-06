@@ -16,13 +16,15 @@ typedef enum MinigameId {
     MINIGAME_RADIO,
     MINIGAME_TRASH,
     MINIGAME_FREEZER,
-    MINIGAME_GENERATOR
+    MINIGAME_GENERATOR,
+    MINIGAME_BOSS
 } MinigameId;
 
 typedef enum MinigameResult {
     MINIGAME_CONTINUE = 0,
     MINIGAME_WON,
-    MINIGAME_CANCELLED
+    MINIGAME_CANCELLED,
+    MINIGAME_LOST
 } MinigameResult;
 
 bool Minigames_Init(void);
@@ -32,7 +34,7 @@ void Minigames_Start(MinigameId id);
 MinigameId Minigames_GetActive(void);
 void Minigames_Clear(void);
 
-/* dt from GetFrameTime(); ESC cancels. */
+/* dt from GetFrameTime(); ESC cancels most minigames; boss: ESC surrenders (MINIGAME_LOST). */
 MinigameResult Minigames_Update(float dt, int screenW, int screenH);
 void Minigames_Draw(int screenW, int screenH);
 

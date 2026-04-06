@@ -91,6 +91,8 @@ typedef struct Game {
     bool day4ShamanLeft;
     bool day4FootstepsStarted;
     bool day4KillerVisible;
+    /* Day 4: Mike Hawk parry minigame cleared — stairs up unlocked. */
+    bool day4BossDone;
     /* Set when shaman dialogue actually starts; blackout runs once it closes (reliable vs lastClosedId). */
     bool day4BlackoutAfterShaman;
 
@@ -105,6 +107,10 @@ typedef struct Game {
     MinigameId activeMinigame;
     /* Opening cinematic (assets/video/intro.mp4); NULL after skip or finish. */
     struct IntroVideoPlayer *introVideo;
+
+    /* Day 4: Mike Hawk sprite on basement stairs after lights return (npc_mike_hawk.png). */
+    Texture2D day4KillerSprite;
+    bool day4KillerSpriteLoaded;
 } Game;
 
 Game *Game_Create(int screenWidth, int screenHeight);

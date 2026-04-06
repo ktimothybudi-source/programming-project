@@ -16,7 +16,7 @@
  * so movement looks smooth even if the frame rate changes a little.
  *
  * Window size:
- *   • Default: 1024×768 (4:3).
+ *   • Default: 1600×900 (same on Windows, macOS, Linux).
  *   • Optional file assets/window_size.txt — first line: two integers, width height.
  *   • Optional args: night_market [width] [height]  (overrides the file)
  *   • -h or --help prints usage.
@@ -29,8 +29,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DEFAULT_SCREEN_WIDTH   1024
-#define DEFAULT_SCREEN_HEIGHT  768
+#define DEFAULT_SCREEN_WIDTH   1600
+#define DEFAULT_SCREEN_HEIGHT  900
 #define MIN_SCREEN_WIDTH       640
 #define MIN_SCREEN_HEIGHT      480
 #define MAX_SCREEN_WIDTH       3840

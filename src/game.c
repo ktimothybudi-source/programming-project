@@ -45,6 +45,11 @@ static void Game_UpdateObjective(Game *game);
 static void Game_AdvanceDayIfReady(Game *game);
 /* True when player should walk around the store (not title / not pure ending screen). */
 static bool Game_IsPlayState(GameState s);
+static void Game_LoadDay4KillerSprite(Game *game);
+static void Game_UnloadDay4KillerSprite(Game *game);
+static bool Game_ShouldDrawDay4Killer(const Game *game);
+static void Game_DrawDay4Killer(const Game *game);
+static void Game_TryTriggerDay4Boss(Game *game);
 
 /* Code created by wu deguang — world (pixel) coordinates where the player appears. */
 static const float SPAWN_KITCHEN_X = 550.0f * WORLD_SCALE;
@@ -108,7 +113,11 @@ Game *Game_Create(int screenWidth, int screenHeight) {
     g->day4ShamanLeft = false;
     g->day4FootstepsStarted = false;
     g->day4KillerVisible = false;
+    g->day4BossDone = false;
     g->day4BlackoutAfterShaman = false;
+
+    g->day4KillerSprite = (Texture2D){ 0 };
+    g->day4KillerSpriteLoaded = false;
 
     g->objectiveText = "Press Enter to begin.";
 
@@ -118,6 +127,8 @@ Game *Game_Create(int screenWidth, int screenHeight) {
     g->camera.rotation = 0.0f;
     g->camera.zoom = CAMERA_ZOOM;
 
+    Game_LoadDay4KillerSprite(g);
+
     Game_ChangeState(g, GAME_STATE_TITLE);
     return g;
 }
@@ -125,6 +136,7 @@ Game *Game_Create(int screenWidth, int screenHeight) {
 /* Free in reverse order of creation; pointers become invalid after free. */
 void Game_Destroy(Game *game) {
     if (!game) return;
+    Game_UnloadDay4KillerSprite(game);
     IntroVideo_Close(game->introVideo);
     game->introVideo = NULL;
     Minigames_Shutdown();
@@ -143,6 +155,7 @@ void Game_Destroy(Game *game) {
  */
 void Game_Restart(Game *game) {
     if (!game) return;
+    Game_UnloadDay4KillerSprite(game);
     IntroVideo_Close(game->introVideo);
     game->introVideo = NULL;
     Map_Destroy(game->map);
@@ -187,11 +200,122 @@ void Game_Restart(Game *game) {
     game->day4ShamanLeft = false;
     game->day4FootstepsStarted = false;
     game->day4KillerVisible = false;
+    game->day4BossDone = false;
     game->day4BlackoutAfterShaman = false;
     game->objectiveText = "Press Enter to begin.";
     Minigames_Clear();
     game->activeMinigame = MINIGAME_NONE;
+    Game_LoadDay4KillerSprite(game);
     Game_ChangeState(game, GAME_STATE_TITLE);
+}
+
+/* OB_STAIRS_UP: design x=1100 w=300 → center x=1250; optional nudge for sprite feet (see map.c). */
+static const float DAY4_KILLER_X_OFFSET_DESIGN = 35.0f;
+
+static float Day4_KillerFootYWorld(void) {
+    return (2200.0f + 180.0f) * WORLD_SCALE;
+}
+
+static float Day4_KillerAnchorXWorld(void) {
+    return ((1100.0f + 150.0f) + DAY4_KILLER_X_OFFSET_DESIGN) * WORLD_SCALE;
+}
+
+static float Day4_KillerSortYWorld(void) {
+    const float dh = 220.0f * WORLD_SCALE;
+    return Day4_KillerFootYWorld() - dh * 0.38f;
+}
+
+static void Game_LoadDay4KillerSprite(Game *game) {
+    if (!game || game->day4KillerSpriteLoaded) return;
+    game->day4KillerSprite = (Texture2D){ 0 };
+    game->day4KillerSpriteLoaded = false;
+    const char *path = "assets/sprites/characters/npc_mike_hawk.png";
+    if (FileExists(path)) {
+        game->day4KillerSprite = LoadTexture(path);
+        game->day4KillerSpriteLoaded = (game->day4KillerSprite.id != 0);
+        if (game->day4KillerSpriteLoaded)
+            SetTextureFilter(game->day4KillerSprite, TEXTURE_FILTER_POINT);
+    }
+}
+
+static void Game_UnloadDay4KillerSprite(Game *game) {
+    if (!game || !game->day4KillerSpriteLoaded) return;
+    if (game->day4KillerSprite.id != 0)
+        UnloadTexture(game->day4KillerSprite);
+    game->day4KillerSprite = (Texture2D){ 0 };
+    game->day4KillerSpriteLoaded = false;
+}
+
+static bool Game_ShouldDrawDay4Killer(const Game *game) {
+    if (!game) return false;
+    if (game->currentDay != 4) return false;
+    if (!game->generatorFixed || game->lightsOff) return false;
+    if (!game->day4KillerVisible) return false;
+    if (!game->inBasement) return false;
+    if (game->day4FootstepsStarted) return false;
+    return true;
+}
+
+/* Small knife drawn in world space (Mike faces left into the basement after texture flip). */
+static void Game_DrawDay4KillerKnife(float stairCenterX, float footY, float dw, float dh) {
+    const float s = WORLD_SCALE;
+    /* Hand sits forward on his screen-right; blade angles up-left. */
+    Vector2 hilt = { stairCenterX + dw * 0.11f, footY - dh * 0.46f };
+    Vector2 tip = { hilt.x + 52.0f * s, hilt.y - 24.0f * s };
+    float thick = 5.0f * s;
+    DrawLineEx(hilt, tip, thick, (Color){ 235, 240, 248, 255 });
+    DrawLineEx(hilt, tip, thick * 0.45f, (Color){ 180, 190, 205, 255 });
+    Rectangle handle = { hilt.x - 10.0f * s, hilt.y - 5.0f * s, 22.0f * s, 11.0f * s };
+    DrawRectanglePro(handle, (Vector2){ 4.0f * s, 5.5f * s }, -28.0f, (Color){ 48, 44, 52, 255 });
+}
+
+static void Game_DrawDay4Killer(const Game *game) {
+    if (!Game_ShouldDrawDay4Killer(game)) return;
+
+    const float stairCenterX = Day4_KillerAnchorXWorld();
+    const float footY = Day4_KillerFootYWorld();
+
+    if (game->day4KillerSpriteLoaded && game->day4KillerSprite.id != 0) {
+        Texture2D tex = game->day4KillerSprite;
+        float tw = (float)tex.width;
+        float th = (float)tex.height;
+        float dh = 220.0f * WORLD_SCALE;
+        float dw = tw * (dh / th);
+        /* Texture is left-heavy; anchor feet ~40% from sprite left so body sits on stair mid. */
+        const float footAnchorX = 0.40f;
+        float dx = stairCenterX - dw * footAnchorX;
+        float dy = footY - dh;
+        /* Face into basement (sprite assumed to face right — flip toward negative X). */
+        Rectangle src = { (float)tex.width, 0.0f, -(float)tex.width, (float)tex.height };
+        Rectangle dst = { dx, dy, dw, dh };
+        DrawTexturePro(tex, src, dst, (Vector2){ 0, 0 }, 0.0f, WHITE);
+        Game_DrawDay4KillerKnife(stairCenterX, footY, dw, dh);
+    } else {
+        float r = 52.0f * WORLD_SCALE;
+        Vector2 c = { stairCenterX, footY - r };
+        DrawCircleV(c, r + 4.0f, (Color){ 20, 18, 28, 255 });
+        DrawCircleV(c, r, (Color){ 180, 140, 110, 255 });
+        Game_DrawDay4KillerKnife(stairCenterX, footY, r * 2.0f, r * 2.0f);
+    }
+}
+
+static void Game_TryTriggerDay4Boss(Game *game) {
+    if (!game || !game->player) return;
+    if (!Game_ShouldDrawDay4Killer(game)) return;
+    if (game->day4BossDone) return;
+    if (Dialogue_IsActive(game->dialogue)) return;
+    if (game->activeMinigame != MINIGAME_NONE) return;
+
+    float kx = Day4_KillerAnchorXWorld();
+    float ky = Day4_KillerFootYWorld();
+    float dx = game->player->position.x - kx;
+    float dy = game->player->position.y - ky;
+    float r = 120.0f * WORLD_SCALE;
+    if (dx * dx + dy * dy > r * r) return;
+
+    game->activeMinigame = MINIGAME_BOSS;
+    Minigames_Start(MINIGAME_BOSS);
+    Game_PlayMinigameStartSfx(game, MINIGAME_BOSS);
 }
 
 static bool Game_IsPlayState(GameState s) {
@@ -282,6 +406,7 @@ static void Game_DevJumpToDay(Game *game, int day) {
     game->day4ShamanLeft = false;
     game->day4FootstepsStarted = false;
     game->day4KillerVisible = false;
+    game->day4BossDone = false;
     game->day4BlackoutAfterShaman = false;
 
     game->day2RadioHeard = false;
@@ -477,7 +602,8 @@ static bool Game_IsCurrentObjectiveTask(const Game *game, InteractableType type)
         if (!game->clockedIn) return type == INTERACT_BADGE;
         if (game->lightsOff && !game->inBasement) return type == INTERACT_BASEMENT_STAIRS;
         if (game->lightsOff && game->inBasement && !game->generatorFixed) return type == INTERACT_GENERATOR;
-        if (game->generatorFixed && game->inBasement && !game->day4FootstepsStarted) return type == INTERACT_BASEMENT_STAIRS_UP;
+        if (game->generatorFixed && game->inBasement && !game->day4FootstepsStarted && game->day4BossDone)
+            return type == INTERACT_BASEMENT_STAIRS_UP;
         if (game->state == GAME_STATE_SCRIPTED_BASEMENT_CHASE && !game->hidingInLocker) 
             return type == INTERACT_LOCKER_1 || type == INTERACT_LOCKER_2 || type == INTERACT_LOCKER_3;
         return false;
@@ -512,6 +638,9 @@ static void Game_PlayMinigameStartSfx(Game *game, MinigameId id) {
         break;
     case MINIGAME_RADIO:
         Audio_PlaySfx(game->audio, AUDIO_SFX_RADIO_ON);
+        break;
+    case MINIGAME_BOSS:
+        Audio_PlaySfx(game->audio, AUDIO_SFX_KNIFE);
         break;
     default:
         break;
@@ -557,8 +686,12 @@ static void Game_CompleteMinigame(Game *game) {
     case MINIGAME_GENERATOR:
         game->generatorFixed = true;
         game->lightsOff = false;
+        game->day4KillerVisible = true;
         Dialogue_Start(game->dialogue, DIALOGUE_DAY4_GENERATOR_FIXED, game);
         break;
+    case MINIGAME_BOSS:
+        Game_Restart(game);
+        return;
     default:
         break;
     }
@@ -722,7 +855,11 @@ static void Game_HandleInteractions(Game *game) {
 // Code created by wu deguang - returns the "Press E to ..." string for an interactable based on game state
 static const char *Game_GetInteractPrompt(const Game *game, const Interactable *in) {
     if (!game || !in) return NULL;
-    
+
+    if (in->type == INTERACT_BASEMENT_STAIRS_UP && game->currentDay == 4 && game->state == GAME_STATE_DAY_4
+        && game->generatorFixed && game->inBasement && !game->day4FootstepsStarted && !game->day4BossDone)
+        return "Confront Mike Hawk on the stairs first";
+
     // Only show prompt if this is the current objective task
     if (!Game_IsCurrentObjectiveTask(game, in->type)) return NULL;
     
@@ -821,6 +958,8 @@ static void Game_UpdateObjective(Game *game) {
                 game->objectiveText = "Day 4: Blackout is coming — then use the basement stairs.";
         }
         else if (!game->generatorFixed) game->objectiveText = "Day 4: Go to basement and fix the generator.";
+        else if (!game->day4BossDone)
+            game->objectiveText = "Day 4: Get close to Mike Hawk on the stairs — needle minigame: click when it hits green.";
         else if (!game->day4FootstepsStarted) game->objectiveText = "Day 4: Go back up the stairs.";
         else if (game->state == GAME_STATE_SCRIPTED_BASEMENT_CHASE && !game->hidingInLocker)
             game->objectiveText = "Day 4: Hide in a locker (Ending 1) — or you already chose another path.";
@@ -867,13 +1006,21 @@ void Game_Update(Game *game, float dt) {
             Game_Restart(game);
             return;
         }
+        MinigameId mid = game->activeMinigame;
         MinigameResult mr = Minigames_Update(dt, game->screenWidth, game->screenHeight);
         if (mr == MINIGAME_WON)
             Game_CompleteMinigame(game);
-        else if (mr == MINIGAME_CANCELLED) {
+        else if (mr == MINIGAME_LOST && mid == MINIGAME_BOSS) {
             if (game->audio)
                 Audio_StopAllSfx(game->audio);
             game->activeMinigame = MINIGAME_NONE;
+            Minigames_Clear();
+            Game_ChangeState(game, GAME_STATE_ENDING_1);
+        } else if (mr == MINIGAME_CANCELLED) {
+            if (game->audio)
+                Audio_StopAllSfx(game->audio);
+            game->activeMinigame = MINIGAME_NONE;
+            Minigames_Clear();
         }
         UI_Update(game->ui, dt);
         Dialogue_Update(game->dialogue);
@@ -919,7 +1066,8 @@ void Game_Update(Game *game, float dt) {
 
     if (Game_IsPlayState(game->state)) {
         /* Old runs only had day4ShamanLeft; arm blackout if we're still before lights-out. */
-        if (game->currentDay == 4 && game->day4ShamanLeft && !game->lightsOff && !game->day4BlackoutAfterShaman)
+        if (game->currentDay == 4 && game->day4ShamanLeft && !game->generatorFixed
+            && !game->lightsOff && !game->day4BlackoutAfterShaman)
             game->day4BlackoutAfterShaman = true;
 
         /*
@@ -940,8 +1088,9 @@ void Game_Update(Game *game, float dt) {
          * Shaman -> blackout: day4BlackoutAfterShaman is set when the shaman script successfully
          * starts (cashier). When dialogue goes idle, we always enter blackout. Also accept
          * lastClosedId for saves stuck from older builds.
+         * After the generator is fixed, lights stay bright — do not fire blackout again.
          */
-        if (game->currentDay == 4 && game->day4ShamanLeft && !game->lightsOff
+        if (game->currentDay == 4 && game->day4ShamanLeft && !game->generatorFixed && !game->lightsOff
             && !Dialogue_IsActive(game->dialogue)
             && game->state != GAME_STATE_SCRIPTED_BLACKOUT && game->state != GAME_STATE_DAY4_STAIRS_CHOICE
             && (game->day4BlackoutAfterShaman || game->dialogue->lastClosedId == DIALOGUE_DAY4_SHAMAN)) {
@@ -983,6 +1132,7 @@ void Game_Update(Game *game, float dt) {
                 Dialogue_Start(game->dialogue, DIALOGUE_DAY3_BOSS_CALL, game);
             }
 
+            Game_TryTriggerDay4Boss(game);
             Game_HandleInteractions(game);
             Game_AdvanceDayIfReady(game);
         }
@@ -1066,8 +1216,16 @@ void Game_Draw(Game *game) {
 
     BeginMode2D(game->camera);
     Map_DrawBackground(game->map, game->player->position.y);
-    if (!game->hidingInLocker)
-        Player_Draw(game->player);
+    {
+        bool drawK = Game_ShouldDrawDay4Killer(game);
+        bool playerSouthOfKiller = drawK && game->player->position.y > Day4_KillerSortYWorld();
+        if (playerSouthOfKiller)
+            Game_DrawDay4Killer(game);
+        if (!game->hidingInLocker)
+            Player_Draw(game->player);
+        if (drawK && !playerSouthOfKiller)
+            Game_DrawDay4Killer(game);
+    }
     Map_DrawForeground(game->map, game->player->position.y);
 
     EndMode2D();

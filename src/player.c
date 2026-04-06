@@ -25,7 +25,6 @@ static void MoveWithCollisions(Player *player, struct Map *map, Vector2 delta);
 static void ResolveAxisX(Player *player, struct Map *map, float oldX, float deltaX);
 static void ResolveAxisY(Player *player, struct Map *map, float oldY, float deltaY);
 static void LoadPlayerSprites(Player *player);
-static void DrawPlayerGroundShadow(const Player *player);
 
 /* Wall collision: fraction of sprite size — small “feet” so tight spaces are easier. */
 static const float COLL_BOX_W_FRAC = 0.30f;
@@ -167,7 +166,6 @@ static void MoveWithCollisions(Player *player, struct Map *map, Vector2 delta) {
 
 void Player_Draw(const Player *player) {
     Rectangle r = Player_GetBounds(player);
-    DrawPlayerGroundShadow(player);
 
     if (player->walkFrameCount == PLAYER_WALK_FRAMES) {
         Texture2D tex = player->walkFrames[player->animFrame];
@@ -195,15 +193,6 @@ void Player_Draw(const Player *player) {
         DrawRectangleLinesEx(r, 2.0f, (Color){ 180, 180, 220, 255 });
         DrawCircle((int)player->position.x, (int)(player->position.y - player->size.y * 0.15f), 4.0f, (Color){ 30, 30, 50, 255 });
     }
-}
-
-static void DrawPlayerGroundShadow(const Player *player) {
-    if (!player) return;
-    float cx = player->position.x;
-    float footY = player->position.y + player->size.y * 0.5f;
-    float rx = fmaxf(10.0f, player->size.x * 0.44f);
-    float ry = fmaxf(6.0f, player->size.x * 0.13f);
-    DrawEllipse((int)cx, (int)(footY + ry * 0.35f), rx, ry, (Color){ 10, 8, 18, 82 });
 }
 
 static void LoadPlayerSprites(Player *player) {

@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <time.h>
 
 /* -------------------------------------------------------------------------- */
@@ -729,6 +730,177 @@ static void gen_draw(Vector2 mpos) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Day 4 boss — needle in the green (click / timed)                           */
+/* -------------------------------------------------------------------------- */
+typedef enum { BB_RULES, BB_PLAY, BB_DEATH, BB_WIN_FULL } BossPhase;
+
+static const float BOSS_BAR_X = 72.0f;
+static const float BOSS_BAR_Y = 220.0f;
+static const float BOSS_BAR_W = 656.0f;
+static const float BOSS_BAR_H = 36.0f;
+static const float BOSS_NEEDLE_W = 5.0f;
+static const float BOSS_ROUND_MAX_T = 16.0f;
+static const float BOSS_RULES_T = 3.0f;
+
+/* Green zone as fraction of bar width — shrinks each successful round (next slot is tighter). */
+static const float boss_green_fracs[3] = { 0.34f, 0.20f, 0.11f };
+
+static BossPhase boss_phase;
+static float boss_t;
+static int boss_hits;
+static float boss_cursor_u;
+static float boss_cursor_dir;
+static float boss_round_timer;
+static float boss_green_x0;
+static float boss_green_x1;
+static float boss_sweep_speed;
+
+static void boss_pick_green_slot(void) {
+    if (boss_hits >= 3) return;
+    float frac = boss_green_fracs[boss_hits];
+    float gw = BOSS_BAR_W * frac;
+    float span = BOSS_BAR_W - gw;
+    float offset = span > 2.0f ? ((float)rand() / (float)RAND_MAX) * span : 0.0f;
+    boss_green_x0 = BOSS_BAR_X + offset;
+    boss_green_x1 = boss_green_x0 + gw;
+}
+
+static void boss_reset(void) {
+    boss_phase = BB_RULES;
+    boss_t = 0.0f;
+    boss_hits = 0;
+    boss_cursor_u = 0.0f;
+    boss_cursor_dir = 1.0f;
+    boss_round_timer = 0.0f;
+    boss_sweep_speed = 0.38f;
+    boss_pick_green_slot();
+}
+
+static bool boss_needle_overlaps_green(void) {
+    float cx = BOSS_BAR_X + boss_cursor_u * BOSS_BAR_W;
+    float nl = cx - BOSS_NEEDLE_W * 0.5f;
+    float nr = cx + BOSS_NEEDLE_W * 0.5f;
+    return !(nr < boss_green_x0 || nl > boss_green_x1);
+}
+
+static void boss_next_round_speed(void) {
+    boss_sweep_speed = 0.38f + (float)boss_hits * 0.11f;
+}
+
+static MinigameResult boss_update(float dt) {
+    if (boss_phase == BB_WIN_FULL) {
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER))
+            return MINIGAME_WON;
+        return MINIGAME_CONTINUE;
+    }
+    if (boss_phase == BB_DEATH) {
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER))
+            boss_reset();
+        return MINIGAME_CONTINUE;
+    }
+    if (boss_phase == BB_RULES) {
+        boss_t += dt;
+        if (boss_t >= BOSS_RULES_T) {
+            boss_phase = BB_PLAY;
+            boss_t = 0.0f;
+            boss_round_timer = 0.0f;
+            boss_cursor_u = 0.0f;
+            boss_cursor_dir = 1.0f;
+        }
+        return MINIGAME_CONTINUE;
+    }
+
+    boss_round_timer += dt;
+    if (boss_round_timer >= BOSS_ROUND_MAX_T) {
+        boss_phase = BB_DEATH;
+        boss_t = 0.0f;
+        return MINIGAME_CONTINUE;
+    }
+
+    boss_cursor_u += boss_cursor_dir * boss_sweep_speed * dt;
+    if (boss_cursor_u >= 1.0f) {
+        boss_cursor_u = 1.0f;
+        boss_cursor_dir = -1.0f;
+    } else if (boss_cursor_u <= 0.0f) {
+        boss_cursor_u = 0.0f;
+        boss_cursor_dir = 1.0f;
+    }
+
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        if (boss_needle_overlaps_green()) {
+            boss_hits++;
+            if (boss_hits >= 3) {
+                boss_phase = BB_WIN_FULL;
+                boss_t = 0.0f;
+                return MINIGAME_CONTINUE;
+            }
+            boss_pick_green_slot();
+            boss_next_round_speed();
+            boss_round_timer = 0.0f;
+            boss_cursor_u = 0.0f;
+            boss_cursor_dir = 1.0f;
+        } else {
+            boss_phase = BB_DEATH;
+            boss_t = 0.0f;
+        }
+    }
+    return MINIGAME_CONTINUE;
+}
+
+static void boss_draw(void) {
+    if (boss_phase == BB_WIN_FULL) {
+        ClearBackground((Color){ 25, 175, 75, 255 });
+        const char *a = "YOU WON";
+        const char *b = "YOU KILLED THE MURDERER";
+        int fsA = 56;
+        int fsB = 28;
+        DrawText(a, g_vw / 2 - MeasureText(a, fsA) / 2, g_vh / 2 - 70, fsA, (Color){ 240, 255, 245, 255 });
+        DrawText(b, g_vw / 2 - MeasureText(b, fsB) / 2, g_vh / 2 + 6, fsB, (Color){ 220, 255, 228, 255 });
+        const char *c = "Click or Space to return to menu";
+        DrawText(c, g_vw / 2 - MeasureText(c, 20) / 2, g_vh / 2 + 68, 20, (Color){ 200, 240, 210, 255 });
+        return;
+    }
+
+    ClearBackground((Color){ 22, 10, 18, 255 });
+    DrawText("MIKE HAWK", 300, 28, 36, (Color){ 200, 90, 90, 255 });
+
+    if (boss_phase == BB_RULES) {
+        DrawText("WHITE needle sweeps the RED bar.", 150, 88, 22, RAYWHITE);
+        DrawText("CLICK when it is over the GREEN zone.", 128, 118, 22, (Color){ 160, 240, 170, 255 });
+        DrawText("Green gets THINNER each hit. 3 hits to win.", 110, 148, 22, (Color){ 200, 200, 210, 255 });
+        DrawText("Miss the green or time runs out = you die. Retry after.", 72, 178, 18, (Color){ 180, 150, 150, 255 });
+        return;
+    }
+
+    if (boss_phase == BB_DEATH) {
+        DrawRectangle(0, 0, g_vw, g_vh, Fade((Color){ 60, 20, 25, 255 }, 0.78f));
+        DrawText("YOU MISSED", 290, 175, 40, (Color){ 255, 100, 100, 255 });
+        DrawText("Mike strikes — CLICK or SPACE to try again", 120, 235, 22, RAYWHITE);
+        return;
+    }
+
+    char hitstr[32];
+    snprintf(hitstr, sizeof(hitstr), "Hits: %d / 3   (round %d — green shrinks)", boss_hits, boss_hits + 1);
+    DrawText(hitstr, 140, 78, 20, (Color){ 200, 200, 210, 255 });
+
+    DrawRectangle((int)BOSS_BAR_X, (int)BOSS_BAR_Y, (int)BOSS_BAR_W, (int)BOSS_BAR_H, (Color){ 160, 35, 45, 255 });
+    DrawRectangle((int)boss_green_x0, (int)BOSS_BAR_Y, (int)(boss_green_x1 - boss_green_x0), (int)BOSS_BAR_H,
+                  (Color){ 50, 200, 90, 255 });
+    DrawRectangleLines((int)BOSS_BAR_X, (int)BOSS_BAR_Y, (int)BOSS_BAR_W, (int)BOSS_BAR_H, (Color){ 90, 90, 100, 255 });
+
+    float cx = BOSS_BAR_X + boss_cursor_u * BOSS_BAR_W;
+    DrawRectangle((int)(cx - BOSS_NEEDLE_W * 0.5f), (int)BOSS_BAR_Y - 10, (int)BOSS_NEEDLE_W, (int)BOSS_BAR_H + 20,
+                  (Color){ 250, 250, 255, 255 });
+
+    float time_left = fmaxf(0.0f, 1.0f - boss_round_timer / BOSS_ROUND_MAX_T);
+    DrawText("Time", (int)BOSS_BAR_X, (int)BOSS_BAR_Y + 48, 18, (Color){ 200, 180, 180, 255 });
+    DrawRectangle((int)BOSS_BAR_X, (int)BOSS_BAR_Y + 72, (int)(BOSS_BAR_W * time_left), 12, (Color){ 200, 40, 50, 255 });
+    DrawRectangleLines((int)BOSS_BAR_X, (int)BOSS_BAR_Y + 72, (int)BOSS_BAR_W, 12, GRAY);
+
+    DrawText("CLICK when needle is in GREEN", 210, (int)BOSS_BAR_Y + 102, 20, RAYWHITE);
+}
+
+/* -------------------------------------------------------------------------- */
 /* Public API                                                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -759,6 +931,7 @@ void Minigames_Start(MinigameId id) {
     case MINIGAME_TRASH: trash_reset(); break;
     case MINIGAME_FREEZER: freezer_reset(); break;
     case MINIGAME_GENERATOR: gen_reset(); break;
+    case MINIGAME_BOSS: boss_reset(); break;
     default: break;
     }
 }
@@ -770,10 +943,12 @@ void Minigames_Clear(void) {
 }
 
 MinigameResult Minigames_Update(float dt, int screenW, int screenH) {
-    (void)dt;
+    (void)screenW;
     (void)screenH;
     if (g_id == MINIGAME_NONE) return MINIGAME_CONTINUE;
     if (IsKeyPressed(KEY_ESCAPE)) {
+        if (g_id == MINIGAME_BOSS)
+            return MINIGAME_LOST;
         Minigames_Clear();
         return MINIGAME_CANCELLED;
     }
@@ -787,6 +962,7 @@ MinigameResult Minigames_Update(float dt, int screenW, int screenH) {
     case MINIGAME_TRASH: r = trash_update(mv); break;
     case MINIGAME_FREEZER: r = freezer_update(mv); break;
     case MINIGAME_GENERATOR: r = gen_update(mv); break;
+    case MINIGAME_BOSS: r = boss_update(dt); break;
     default: break;
     }
     return r;
@@ -822,10 +998,16 @@ void Minigames_Draw(int screenW, int screenH) {
     case MINIGAME_GENERATOR:
         gen_draw(host_mouse_virtual());
         break;
+    case MINIGAME_BOSS:
+        boss_draw();
+        break;
     default:
         break;
     }
     host_end_texture_draw(screenW, screenH);
     DrawRectangle(0, screenH - 28, screenW, 28, Fade(BLACK, 0.65f));
-    DrawText("[ESC] Cancel minigame", 12, screenH - 22, 18, (Color){ 200, 195, 220, 255 });
+    if (g_id == MINIGAME_BOSS)
+        DrawText("[ESC] Give up (bad ending)", 12, screenH - 22, 18, (Color){ 220, 160, 160, 255 });
+    else
+        DrawText("[ESC] Cancel minigame", 12, screenH - 22, 18, (Color){ 200, 195, 220, 255 });
 }

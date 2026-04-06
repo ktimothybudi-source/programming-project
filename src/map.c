@@ -72,7 +72,6 @@ static void BuildNpcs(Map *map);
 static void Map_LoadTaskZonesFromMask(Map *map);
 static void Map_LoadNpcTextures(Map *map);
 static void DrawNpcSprite(const Map *map, NpcType type, Rectangle r);
-static void DrawNpcGroundShadow(float cx, float footY, float refWidth);
 static void DrawNpcsForSort(const Map *map, float playerY, bool drawBehind);
 
 /*
@@ -470,10 +469,8 @@ static void BuildInteractables(Map *map) {
 }
 
 /*
- * Customers stand on the main sales floor (y < kitchen).
- * Shelf quads in *design* coords: NW/NE y≈200–480, SW/SE y≈520–800, x≈200–550 and 2250–2600.
- * Spots keep x in the open aisle (≈600–2100) and y high enough that scaled sprites
- * sit on the floor in front of shelves, not on the top fixtures (see screenshot overlap fixes).
+ * Customers stand in different spots across the main floor (y < kitchen). Dialogue
+ * order is still by day at the cashier; these are visual anchors only.
  */
 static void BuildNpcs(Map *map) {
     static const float NPC_DRAW_SCALE = 1.82f;
@@ -487,12 +484,12 @@ static void BuildNpcs(Map *map) {
         float x, y;
         const char *label;
     } spots[] = {
-        { 660,  708, "Lady" },
-        { 920,  706, "Old Man" },
-        { 1205, 710, "Teen" },
-        { 1500, 708, "Old Lady" },
-        { 1780, 706, "Creepy" },
-        { 2050, 708, "Shaman" },
+        { 260,  360, "Lady" },
+        { 720,  420, "Old Man" },
+        { 1180, 340, "Teen" },
+        { 1620, 400, "Old Lady" },
+        { 2020, 350, "Creepy" },
+        { 2380, 460, "Shaman" },
     };
     for (size_t i = 0; i < sizeof(spots) / sizeof(spots[0]); i++) {
         map->npcs[map->npcCount++] = (NpcSpot){
@@ -505,12 +502,6 @@ static void BuildNpcs(Map *map) {
 
 static inline float rect_center_y(Rectangle r) {
     return r.y + r.height * 0.5f;
-}
-
-static void DrawNpcGroundShadow(float cx, float footY, float refWidth) {
-    float rx = fmaxf(8.0f, refWidth * 0.44f);
-    float ry = fmaxf(5.0f, refWidth * 0.13f);
-    DrawEllipse((int)cx, (int)(footY + ry * 0.35f), rx, ry, (Color){ 10, 8, 18, 78 });
 }
 
 static void Map_LoadNpcTextures(Map *map) {
@@ -543,7 +534,6 @@ static void DrawNpcSprite(const Map *map, NpcType type, Rectangle r) {
         float dh = th * scale;
         float ox = r.x + (r.width - dw) * 0.5f;
         float oy = r.y + r.height - dh;
-        DrawNpcGroundShadow(ox + dw * 0.5f, oy + dh, dw);
         DrawTexturePro(
             tex,
             (Rectangle){ 0, 0, tw, th },
@@ -555,7 +545,6 @@ static void DrawNpcSprite(const Map *map, NpcType type, Rectangle r) {
     }
 
     float cx = r.x + r.width * 0.5f;
-    DrawNpcGroundShadow(cx, r.y + r.height - 3.0f, r.width);
     float headR = fmaxf(7.0f, r.width * 0.26f);
     float hy = r.y + headR + 3.0f;
     float bodyTop = hy + headR * 0.55f;
